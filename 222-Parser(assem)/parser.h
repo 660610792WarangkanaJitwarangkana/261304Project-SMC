@@ -18,6 +18,7 @@ struct IRLine {
     string rawLabel;    // label text if present ("" otherwise)
     string instr;       // mnemonic (e.g., "add", ".fill") or "" for blank-line-as-noop
     string f0, f1, f2;  // raw field strings (may be empty)
+    string comment;
 
     // resolved (set in pass2)
     bool isFill = false;
@@ -56,6 +57,7 @@ private:
     vector<string> rawLines;
     vector<IRLine> ir;
     vector<Label> symbols;
+    vector<string> comments;  // เก็บ comment ของแต่ละบรรทัด
 
     // internal helpers (private)
     void readAllLines(const std::string &filename, const std::string &commentChars);

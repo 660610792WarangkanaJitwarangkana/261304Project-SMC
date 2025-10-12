@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <iostream>
 #include <limits>
+#include <iomanip>
 
 using namespace std;
 
@@ -241,36 +242,75 @@ const vector<Label>& Parser::getSymbols() const { return symbols; }
 void Parser::writeIRFile(const string &outname) const {
     ofstream ofs(outname);
     if (!ofs.is_open()) throw runtime_error("cannot write IR file: " + outname);
-    ofs << "addr,instr,rawLabel,f0,f1,f2,regA,regB,dest,offset16,fillValue\n";
+
+    ofs << left
+        << setw(8) << "addr"
+        << setw(8) << "label"
+        << setw(8) << "instr"
+        << setw(8) << "field0"
+        << setw(8) << "field1"
+        << setw(8) << "field2"
+        << setw(8) << "regA"
+        << setw(8) << "regB"
+        << setw(8) << "dest"
+        << setw(10) << "offset16"
+        << setw(10) << "fillValue"
+        << "\n";
+
     for (const auto &L : ir) {
-        ofs << L.address << "  |  ";
-        ofs << L.instr << "  |  ";
-        ofs << L.rawLabel << "  |  ";
-        ofs << L.f0 << "  |  ";
-        ofs << L.f1 << "  |  ";
-        ofs << L.f2 << "  |  ";
-        if (L.instr == "add" || L.instr == "nand") {
-            ofs << L.regA << "  |  " << L.regB << "  |  " << L.dest << "  ||  ";
-        } else if (L.instr == "lw" || L.instr == "sw" || L.instr == "beq") {
-            ofs << L.regA << "  |  " << L.regB << "  ||  " << L.offset16 << "  |  ";
-        } else if (L.instr == ".fill") {
-            ofs << "  |||  " << "  |  " << L.fillValue;
-        } else if (L.instr == "jalr") {
-            ofs << L.regA << "  |  " << L.regB << "  || |  ";
-        } else {
-            // halt, noop, or blank-as-noop
-            ofs << "  ||| |   ";
-        }
-        ofs << "\n";
+        ofs << setw(8) << L.address
+            << setw(8) << L.rawLabel
+            << setw(8) << L.instr
+            << setw(8) << L.f0
+            << setw(8) << L.f1
+            << setw(8) << L.f2
+            << setw(8) << L.regA
+            << setw(8) << L.regB
+            << setw(8) << L.dest
+            << setw(10) << L.offset16
+            << setw(10) << L.fillValue
+            << "\n";
     }
     ofs.close();
+
+    // ofs << "addr,instr,rawLabel,f0,f1,f2,regA,regB,dest,offset16,fillValue\n";
+    // for (const auto &L : ir) {
+    //     ofs << L.address << "  |  ";
+    //     ofs << L.instr << "  |  ";
+    //     ofs << L.rawLabel << "  |  ";
+    //     ofs << L.f0 << "  |  ";
+    //     ofs << L.f1 << "  |  ";
+    //     ofs << L.f2 << "  |  ";
+    //     if (L.instr == "add" || L.instr == "nand") {
+    //         ofs << L.regA << "  |  " << L.regB << "  |  " << L.dest << "  ||  ";
+    //     } else if (L.instr == "lw" || L.instr == "sw" || L.instr == "beq") {
+    //         ofs << L.regA << "  |  " << L.regB << "  ||  " << L.offset16 << "  |  ";
+    //     } else if (L.instr == ".fill") {
+    //         ofs << "  |||  " << "  |  " << L.fillValue;
+    //     } else if (L.instr == "jalr") {
+    //         ofs << L.regA << "  |  " << L.regB << "  || |  ";
+    //     } else {
+    //         // halt, noop, or blank-as-noop
+    //         ofs << "  ||| |   ";
+    //     }
+    //     ofs << "\n";
+    // }
+    // ofs.close();
 }
 
 void Parser::writeSymbolsFile(const string &outname) const {
     ofstream ofs(outname);
     if (!ofs.is_open()) throw runtime_error("cannot write symbols file: " + outname);
+    
+    ofs << left
+        << setw(8) << "Name"
+        << setw(8) << "Address"
+        << "\n";
+
     for (const auto &p : symbols) {
-        ofs << p.name << " " << p.address << "\n";
+        ofs << setw(8) << p.name
+            << setw(18) << p.address
+            << "\n";
     }
     ofs.close();
 }
