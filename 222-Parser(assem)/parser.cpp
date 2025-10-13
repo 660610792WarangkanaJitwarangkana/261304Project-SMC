@@ -273,29 +273,6 @@ void Parser::writeIRFile(const string &outname) const {
     }
     ofs.close();
 
-    // ofs << "addr,instr,rawLabel,f0,f1,f2,regA,regB,dest,offset16,fillValue\n";
-    // for (const auto &L : ir) {
-    //     ofs << L.address << "  |  ";
-    //     ofs << L.instr << "  |  ";
-    //     ofs << L.rawLabel << "  |  ";
-    //     ofs << L.f0 << "  |  ";
-    //     ofs << L.f1 << "  |  ";
-    //     ofs << L.f2 << "  |  ";
-    //     if (L.instr == "add" || L.instr == "nand") {
-    //         ofs << L.regA << "  |  " << L.regB << "  |  " << L.dest << "  ||  ";
-    //     } else if (L.instr == "lw" || L.instr == "sw" || L.instr == "beq") {
-    //         ofs << L.regA << "  |  " << L.regB << "  ||  " << L.offset16 << "  |  ";
-    //     } else if (L.instr == ".fill") {
-    //         ofs << "  |||  " << "  |  " << L.fillValue;
-    //     } else if (L.instr == "jalr") {
-    //         ofs << L.regA << "  |  " << L.regB << "  || |  ";
-    //     } else {
-    //         // halt, noop, or blank-as-noop
-    //         ofs << "  ||| |   ";
-    //     }
-    //     ofs << "\n";
-    // }
-    // ofs.close();
 }
 
 void Parser::writeSymbolsFile(const string &outname) const {
@@ -303,13 +280,13 @@ void Parser::writeSymbolsFile(const string &outname) const {
     if (!ofs.is_open()) throw runtime_error("cannot write symbols file: " + outname);
     
     ofs << left
-        << setw(8) << "Name"
-        << setw(8) << "Address"
+        << setw(10) << "LabelName"
+        << setw(10) << "Address"
         << "\n";
 
     for (const auto &p : symbols) {
-        ofs << setw(8) << p.name
-            << setw(18) << p.address
+        ofs << setw(10) << p.name
+            << setw(10) << p.address
             << "\n";
     }
     ofs.close();
