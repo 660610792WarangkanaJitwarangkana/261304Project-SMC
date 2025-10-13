@@ -1,7 +1,5 @@
-// parser.h
-// Header for assembler front-end (Parser & Symbol Table Manager)
-#ifndef PARSER_H
-#define PARSER_H
+#ifndef COMMON_H
+#define COMMON_H
 
 #include <string>
 #include <vector>
@@ -49,8 +47,8 @@ public:
     const vector<Label>& getSymbols() const;
 
     // convenience: write IR CSV and symbols text files
-    void writeIRFile(const string &outname = "program.ir") const;
-    void writeSymbolsFile(const string &outname = "symbols.txt") const;
+    void writeIRFile(const string &outname = "IR.ir") const;
+    void writeSymbolsFile(const string &outname = "symbolsTable.txt") const;
 
 private:
     vector<string> rawLines;
@@ -63,4 +61,35 @@ private:
     void pass2_resolve(bool countBlankLines);
 };
 
-#endif // PARSER_H
+// Backend: แปลง IR → machine code (เลขฐาน 10)
+class Assembler {
+public:
+    Assembler(const vector<IRLine>& ir, const vector<Label>& symbols);
+
+    // สร้าง machine code ทั้งโปรแกรม (exit(1) ถ้าเจอ error)
+    vector<int> assembleAll() const;
+
+    // เขียน output เป็นไฟล์เลขฐาน 10 ต่อบรรทัด
+    void writeMachineFile(const string &filename, const vector<int>& codes) const;
+
+private:
+    vector<IRLine> ir;
+    vector<Label> symbols;
+
+    int getOpcode(const string &mnemonic) const;
+    int encodeRType(const IRLine &L) const;
+    int encodeIType(const IRLine &L) const;
+    int encodeJType(const IRLine &L) const;
+    int encodeOType(const IRLine &L) const;
+    int encodeFill(const IRLine &L) const;
+};
+
+bool isNumber(const string &s);
+
+int findLabelAddress(const vector<Label> &symbols, const string &label);
+
+vector<IRLine> readIRFile(const string &filename, const vector<Label> &symbols);
+
+vector<Label> readSymbols(const string &filename);
+
+#endif 
