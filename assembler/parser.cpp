@@ -245,29 +245,29 @@ void Parser::writeIRFile(const string &outname) const {
     if (!ofs.is_open()) throw runtime_error("cannot write IR file: " + outname);
 
     ofs << left
-        << setw(8) << "addr"
-        << setw(8) << "label"
-        << setw(8) << "instr"
-        << setw(8) << "field0"
-        << setw(8) << "field1"
-        << setw(8) << "field2"
-        << setw(8) << "regA"
-        << setw(8) << "regB"
-        << setw(8) << "dest"
+        << setw(8)  << "addr"
+        << setw(8)  << "label"
+        << setw(8)  << "instr"
+        << setw(8)  << "field0"
+        << setw(8)  << "field1"
+        << setw(10) << "field2"
+        << setw(8)  << "regA"
+        << setw(8)  << "regB"
+        << setw(8)  << "dest"
         << setw(10) << "offset16"
         << setw(10) << "fillValue"
         << "\n";
 
     for (const auto &L : ir) {
-        ofs << setw(8) << L.address
-            << setw(8) << L.rawLabel
-            << setw(8) << L.instr
-            << setw(8) << L.f0
-            << setw(8) << L.f1
-            << setw(8) << L.f2
-            << setw(8) << L.regA
-            << setw(8) << L.regB
-            << setw(8) << L.dest
+        ofs << setw(8)  << L.address
+            << setw(8)  << L.rawLabel
+            << setw(8)  << L.instr
+            << setw(8)  << L.f0
+            << setw(8)  << L.f1
+            << setw(10) << L.f2
+            << setw(8)  << L.regA
+            << setw(8)  << L.regB
+            << setw(8)  << L.dest
             << setw(10) << L.offset16
             << setw(10) << L.fillValue
             << "\n";
