@@ -1,4 +1,4 @@
-# test
+# test ตามรายละเอียด project ของอาจารย์
         lw 0 1 five     load reg1 with 5 (uses symbolic address)
         lw 1 2 3        load reg2 with -1 (uses numeric address)
 start   add 1 2 1       decrement reg1
@@ -11,7 +11,9 @@ five    .fill 5
 neg1    .fill -1
 stAddr  .fill start     will contain the address of start
 
-# test.asm - fixed version
+
+#--------------------------------------------------------------
+#เพิ่มเทสเข้ามา test.asm - fixed version
 start1  add 1 2 3 
         lw 0 1 five
         beq 0 1 done1
