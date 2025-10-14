@@ -4,7 +4,7 @@
 //   .\assembler
 // อ่านไฟล์ IR + Symbols ได้แล้ว
 // รันผ่าน + ได้ machine code ที่ถูกต้องแล้ว
-
+// ยังไม่ได้เขียนคอมเมนต์
 
 
 // assembler_backend_week3_fixed.cpp
