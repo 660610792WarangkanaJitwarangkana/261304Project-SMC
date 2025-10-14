@@ -1,264 +1,404 @@
-// assembler.cpp
-// Compile: g++ -std=c++17 assembler.cpp -o assembler
+// assembler_backend_week3_fixed.cpp
+// จุดประสงค์ไฟล์:
+//   - สัปดาห์ที่ 3 (Part B): เข้ารหัสคำสั่งเป็น machine code 32 บิต (R/I/J/O + .fill)
+//   - ใช้ IR + symbol table (สมมติ) มาประกอบบิต ตามฟอร์แมตที่กำหนด
+//   - โค้ดนี้หลีกเลี่ยง if-with-initializer เพื่อให้คอมไพล์ได้แม้ -std=c++14
+//
+// วิธีคิดโดยรวม:
+//   1) map mnemonic -> opcode
+//   2) แยกประเภทคำสั่ง (R/I/J/O/.fill) แล้ว pack บิตด้วย shift/mask
+//   3) ฟังก์ชันเสริม: หา label, แปลงตัวเลข, คำนวณ offset (beq = target-(PC+1))
+//   4) ตรวจ error สำคัญ: opcode ไม่รู้จัก, reg ผิดช่วง, offset เกิน 16-bit, label ไม่มี
+//
 
 
-#include "common.h"   
-#include <iostream>
+// ปฟ. แก้ชื่อไฟล์เป็น assembler.cpp
+// Build:
+//   g++ -std=c++17 assembler.cpp -o assembler.exe
+//   .\assembler
+
+#include <iostream>       // cout, cin
+#include <string>         // std::string
+#include <vector>         // std::vector
+#include <unordered_map>  // std::unordered_map (symbol table)
+#include <iomanip>        // setw (ใช้เวลา format output)
+#include <cctype>         // isdigit, isxdigit
+#include <stdexcept>      // สำหรับ throw exception (parse number)
+#include <cstdint>        // int32_t, uint32_t
 #include <fstream>
-#include <stdexcept>
-#include <unordered_map>
 #include <sstream>
-#include <vector>
-#include <string>
-#include <cctype>
-#include <iomanip>
 
 using namespace std;
 
-Assembler::Assembler(const vector<IRLine>& ir, const vector<Label>& symbols) {
-    this->ir = ir;
-    this->symbols = symbols;
+// -------------------- ส่วนกำหนด Opcode --------------------
+// หมายเหตุ: .fill = เคสพิเศษ (ไม่ใช่ instruction) เราจะให้เป็นค่า -1
+enum class Op : int {
+    ADD=0, NAND=1, LW=2, SW=3, BEQ=4, JALR=5, HALT=6, NOOP=7, FILL=-1
+};
+
+static const unordered_map<string, Op> OPCODE_MAP = {
+    {"add",  Op::ADD},  {"nand", Op::NAND},
+    {"lw",   Op::LW},   {"sw",   Op::SW},
+    {"beq",  Op::BEQ},  {"jalr", Op::JALR},
+    {"halt", Op::HALT}, {"noop", Op::NOOP},
+    {".fill",Op::FILL}
+};
+
+// -------------------- Bit layout (การจัดบิต 32 บิต) --------------------
+// รูปแบบบิต (ซ้าย->ขวา):
+//   [ opcode(3) | regA(3) | regB(3) | ที่เหลือ 16 บิต/3 บิต แล้วแต่ประเภท ]
+constexpr int OPCODE_SHIFT = 22;
+constexpr int REGA_SHIFT   = 19;
+constexpr int REGB_SHIFT   = 16;
+
+// ฟังก์ชัน pack บิตสำหรับแต่ละฟอร์แมต
+inline uint32_t packR(int opcode, int rA, int rB, int dest) {
+    // R-type: opcode|regA|regB|dest(3 บิต)
+    return (uint32_t(opcode) << OPCODE_SHIFT)
+         | (uint32_t(rA)     << REGA_SHIFT)
+         | (uint32_t(rB)     << REGB_SHIFT)
+         | (uint32_t(dest) & 0x7u);
+}
+inline uint32_t packI(int opcode, int rA, int rB, int offset16) {
+    // I-type: opcode|regA|regB|offset(16 บิต - two's complement)
+    return (uint32_t(opcode) << OPCODE_SHIFT)
+         | (uint32_t(rA)     << REGA_SHIFT)
+         | (uint32_t(rB)     << REGB_SHIFT)
+         | (uint32_t(offset16) & 0xFFFFu);
+}
+inline uint32_t packJ(int opcode, int rA, int rB) {
+    // J-type: opcode|regA|regB|unused(16)
+    return (uint32_t(opcode) << OPCODE_SHIFT)
+         | (uint32_t(rA)     << REGA_SHIFT)
+         | (uint32_t(rB)     << REGB_SHIFT);
+}
+inline uint32_t packO(int opcode) {
+    // O-type: opcode|unused(22)
+    return (uint32_t(opcode) << OPCODE_SHIFT);
 }
 
-int Assembler::getOpcode(const string &mnemonic) const {
-    if (mnemonic == "add") return 0;
-    if (mnemonic == "nand") return 1;
-    if (mnemonic == "lw") return 2;
-    if (mnemonic == "sw") return 3;
-    if (mnemonic == "beq") return 4;
-    if (mnemonic == "jalr") return 5;
-    if (mnemonic == "halt") return 6;
-    if (mnemonic == "noop") return 7;
-    if (mnemonic == ".fill") return -1;
-    throw runtime_error("Unknown opcode: " + mnemonic);
+// -------------------- ส่วน Error / โครงสร้างผลลัพธ์ --------------------
+enum class AsmError {
+    NONE = 0,
+    UNKNOWN_OPCODE,     // ไม่รู้จักคำสั่ง
+    UNDEFINED_LABEL,    // อ้าง label ที่ไม่มีใน symbol table
+    OFFSET_OUT_OF_RANGE,// offset 16-bit เกินช่วง
+    BAD_IMMEDIATE,      // immediate/number แปลงไม่ได้
+    BAD_REGISTER        // หมายเลขเรจิสเตอร์ออกนอกช่วง 0..7 หรือหายไป
+};
+
+struct ErrInfo {
+    AsmError code{AsmError::NONE};
+    string   msg;
+};
+
+inline bool okReg(int r){ return 0<=r && r<=7; } // reg 3 บิต: 0..7
+
+// -------------------- Helper: mapping/parse/symbol/offset --------------------
+
+// map mnemonic -> opcode (int) (ถ้า .fill จะคืน -1)
+ErrInfo toOpcode(const string& mnemonic, int& outOpcode) {
+    auto it = OPCODE_MAP.find(mnemonic);
+    if (it == OPCODE_MAP.end())
+        return {AsmError::UNKNOWN_OPCODE, "unknown opcode: " + mnemonic};
+    if (it->second == Op::FILL) { outOpcode = -1; return {AsmError::NONE,""}; }
+    outOpcode = static_cast<int>(it->second);
+    return {AsmError::NONE,""};
 }
 
-vector<int> Assembler::assembleAll() const {
-    vector<int> codes;
-    for (const auto &L : ir) {
-        int code = 0;
-        if (L.isFill) {
-            code = encodeFill(L);
-        } else if (L.instr == "add" || L.instr == "nand") {
-            code = encodeRType(L);
-        } else if (L.instr == "lw" || L.instr == "sw" || L.instr == "beq") {
-            code = encodeIType(L);
-        } else if (L.instr == "jalr") {
-            code = encodeJType(L);
-        } else if (L.instr == "halt" || L.instr == "noop") {
-            code = encodeOType(L);
-        } else {
-            cerr << "Error: unknown instruction '" << L.instr
-                 << "' at address " << L.address << endl;
-            exit(1);
-        }
-        codes.push_back(code);
-    }
-    return codes;
-}
+// เช็คช่วง signed 16-bit
+inline bool inSigned16(long long x){ return -32768<=x && x<=32767; }
 
-int Assembler::encodeRType(const IRLine &L) const {
-    int opcode = getOpcode(L.instr);
-    int regA = L.regA & 0x7;
-    int regB = L.regB & 0x7;
-    int dest = L.dest & 0x7;
-    return (opcode << 22) | (regA << 19) | (regB << 16) | dest;
-}
-
-int Assembler::encodeIType(const IRLine &L) const {
-    int opcode = getOpcode(L.instr);
-    int regA = L.regA & 0x7;
-    int regB = L.regB & 0x7;
-    int offset = L.offset16 & 0xFFFF; // 16-bit signed
-    return (opcode << 22) | (regA << 19) | (regB << 16) | offset;
-}
-
-int Assembler::encodeJType(const IRLine &L) const {
-    int opcode = getOpcode(L.instr);
-    int regA = L.regA & 0x7;
-    int regB = L.regB & 0x7;
-    return (opcode << 22) | (regA << 19) | (regB << 16);
-}
-
-int Assembler::encodeOType(const IRLine &L) const {
-    int opcode = getOpcode(L.instr);
-    return (opcode << 22);
-}
-
-int Assembler::encodeFill(const IRLine &L) const {
-    return L.fillValue;
-}
-
-void Assembler::writeMachineFile(const string &filename, const vector<int>& codes) const {
-    ofstream out(filename);
-    if (!out.is_open()) {
-        cerr << "Cannot open output file: " << filename << endl;
-        exit(1);
-    }
-    for (int c : codes) out << c << "\n";
-    out.close();
-}
-
-// ตรวจสอบว่า string เป็นตัวเลขหรือไม่
-bool isNumber(const string &s) {
+// ตรวจลักษณะสตริงว่าเป็นตัวเลขหรือไม่ (รองรับ +/-, dec, 0x..)
+bool looksNumber(const string& s){
     if (s.empty()) return false;
-    size_t i = 0;
-    if (s[0] == '-' || s[0] == '+') i = 1;
-    for (; i < s.size(); ++i)
-        if (!isdigit(s[i])) return false;
+    size_t i=0; if (s[0]=='+'||s[0]=='-') i=1;
+    if (i>=s.size()) return false;
+    if (i+1<s.size() && s[i]=='0' && (s[i+1]=='x'||s[i+1]=='X')){
+        i+=2; if (i>=s.size()) return false;
+        for(; i<s.size(); ++i) if(!isxdigit((unsigned char)s[i])) return false;
+        return true;
+    }
+    for(; i<s.size(); ++i) if(!isdigit((unsigned char)s[i])) return false;
     return true;
 }
 
-// หา address ของ label จาก symbol table
-int findLabelAddress(const vector<Label> &symbols, const string &label) {
-    for (auto &L : symbols)
-        if (L.name == label) return L.address;
-    cerr << "Undefined label: " << label << endl;
-    exit(1);
+// แปลงสตริง -> long long (ฐานอัตโนมัติ: 0x.. = 16)
+ErrInfo parseNumber(const string& token, long long& outVal){
+    if (!looksNumber(token))
+        return {AsmError::BAD_IMMEDIATE, "not a valid number: " + token};
+    try{
+        size_t pos=0;
+        outVal = stoll(token, &pos, 0); // base 0 = auto (0x => hex)
+        if (pos!=token.size())
+            return {AsmError::BAD_IMMEDIATE, "trailing junk: " + token};
+        return {AsmError::NONE,""};
+    }catch(...){
+        return {AsmError::BAD_IMMEDIATE, "cannot parse: " + token};
+    }
 }
 
-// อ่าน IR file และ resolve label/offset
-vector<IRLine> readIRFile(const string &filename, const vector<Label> &symbols) {
-    vector<IRLine> ir;
-    ifstream in(filename);
-    if (!in.is_open()) throw runtime_error("Cannot open IR file: " + filename);
+// หา address ของ label จาก symbol table
+ErrInfo findLabel(const unordered_map<string,int>& symtab,
+                  const string& label, int& outAddr){
+    auto it = symtab.find(label);
+    if (it==symtab.end())
+        return {AsmError::UNDEFINED_LABEL, "undefined label: " + label};
+    outAddr = it->second;
+    return {AsmError::NONE,""};
+}
 
-    cout << "\n-------------------------------------\n";
-    cout << "\nReading IR from: " << filename << endl;
+// คืนค่าฟิลด์ (เลข/label) โดยคำนึงถึงชนิดฟิลด์:
+//   - asOffset16=true  => ต้องบีบให้เข้า 16 บิต (ถ้าเกิน => error)
+//   - isBranch=true    => คำนวณ relative offset = target - (PC+1) (สำหรับ beq)
+//   - isBranch=false   => ใช้ address ตรง ๆ (เช่น lw/sw/.fill เมื่อเป็น label)
+ErrInfo getFieldValue(const unordered_map<string,int>& symtab,
+                      const string& token, int currentPC,
+                      bool asOffset16, bool isBranch, int& outVal){
+    long long val=0;
+    if (looksNumber(token)){
+        ErrInfo e = parseNumber(token,val);
+        if(e.code!=AsmError::NONE) return e;
+    }else{
+        int addr=0;
+        ErrInfo e = findLabel(symtab, token, addr);
+        if (e.code!=AsmError::NONE) return e;
+        if (isBranch) val = (long long)addr - (long long)(currentPC+1);
+        else          val = addr;
+    }
+    if (asOffset16 && !inSigned16(val))
+        return {AsmError::OFFSET_OUT_OF_RANGE, "offset out of 16-bit range: " + to_string(val)};
+    outVal = (int)val;
+    return {AsmError::NONE,""};
+}
 
-    string line;
-    getline(in, line); // skip header
+// -------------------- โครงสร้าง IR (อินพุตจาก Part A) --------------------
+// เราจะสมมติว่า Parser (Part A) แยกมาให้แบบนี้
+struct IRInstr {
+    string mnemonic;      // "add","lw","beq","jalr","halt","noop",".fill"
+    int    regA{-1}, regB{-1}, dest{-1}; // ใช้เฉพาะบาง format (R/J ใช้ dest)
+    string fieldToken;    // ใช้กับ I-type (.fill ก็ใช้: เก็บเลข/label)
+    int    pc{-1};        // address ของบรรทัดนี้ (เริ่ม 0)
+};
 
-    int lineCount = 0;
-    while (getline(in, line)) {
-        if (line.empty()) continue;
+// -------------------- ฟังก์ชันช่วยเช็คเรจิสเตอร์ --------------------
+static ErrInfo needReg(int reg, const string& name){
+    if (reg < 0)
+        return {AsmError::BAD_REGISTER, "missing "+name};
+    if (!okReg(reg))
+        return {AsmError::BAD_REGISTER, "bad "+name+": "+to_string(reg)};
+    return {AsmError::NONE,""};
+}
 
-        // แยก token ทั้งหมดในบรรทัด
-        istringstream iss(line);
-        vector<string> tokens;
-        string tok;
-        while (iss >> tok) tokens.push_back(tok);
+// -------------------- สัปดาห์ที่ 3: encode เป็น machine code --------------------
+struct EncodeResult {
+    ErrInfo  error;
+    int32_t  word{0};  // machine code base-10 (signed 32 บิตพิมพ์ออกมา)
+};
 
-        if (tokens.size() < 3) continue; // skip บรรทัดว่าง
+EncodeResult assemble(const unordered_map<string,int>& symtab, const IRInstr& ir){
+    EncodeResult r;
+    int opcode=-1;
 
-        IRLine L{};
-        L.address = stoi(tokens[0]);
-        int pos = 1;
+    // 1) แปลง mnemonic -> opcode (หรือ .fill = -1)
+    r.error = toOpcode(ir.mnemonic, opcode);
+    if (r.error.code!=AsmError::NONE) return r;
 
-        // ตรวจว่ามี label หรือไม่ (เช็คว่าถัดจาก address เป็น opcode หรือ label)
-        string maybeInstr = tokens[pos];
-        vector<string> validInstr = {"add","nand","lw","sw","beq","jalr","halt","noop",".fill"};
-
-        auto isInstr = [&](const string &x) {
-            for (auto &i : validInstr) if (x == i) return true;
-            return false;
-        };
-
-        if (!isInstr(maybeInstr)) { // มี label
-            L.rawLabel = maybeInstr;
-            pos++;
-        }
-
-        L.instr = tokens[pos++];
-        L.f0 = (pos < tokens.size()) ? tokens[pos++] : "";
-        L.f1 = (pos < tokens.size()) ? tokens[pos++] : "";
-        L.f2 = (pos < tokens.size()) ? tokens[pos++] : "";
-
-        // ประมวลผล field ตามประเภทคำสั่ง
-        if (L.instr == "add" || L.instr == "nand") {
-            L.regA = stoi(L.f0);
-            L.regB = stoi(L.f1);
-            L.dest = stoi(L.f2);
-        } else if (L.instr == "lw" || L.instr == "sw" || L.instr == "beq") {
-            L.regA = stoi(L.f0);
-            L.regB = stoi(L.f1);
-            try {
-                L.offset16 = stoi(L.f2);
-            } catch (...) {
-                // ถ้าเป็น label เช่น "five"
-                for (auto &s : symbols) {
-                    if (s.name == L.f2) {
-                        L.offset16 = s.address;
-                        break;
-                    }
-                }
-            }
-        } else if (L.instr == ".fill") {
-            try {
-                L.fillValue = stoi(L.f0);
-            } catch (...) {
-                for (auto &s : symbols) {
-                    if (s.name == L.f0) {
-                        L.fillValue = s.address;
-                        break;
-                    }
-                }
-            }
-            L.isFill = true;
-        } else if (L.instr == "jalr") {
-            L.regA = stoi(L.f0);
-            L.regB = stoi(L.f1);
-        }
-
-        ir.push_back(L);
-        lineCount++;
+    // 2) .fill = ไม่ใช่คำสั่ง ให้คืนค่าเป็นเลข/addr ตรง ๆ
+    if (opcode < 0){
+        int val=0;
+        ErrInfo e = getFieldValue(symtab, ir.fieldToken, ir.pc,
+                                  /*asOffset16=*/false, /*isBranch=*/false, val);
+        if (e.code!=AsmError::NONE){ r.error=e; return r; }
+        r.word = val;
+        return r;
     }
 
-    cout << "Loaded " << ir.size() << " IR instructions.\n";
-    cout << "\n-------------------------------------\n\n";
-    return ir;
+    // 3) เลือกทางตามประเภท opcode
+    switch (static_cast<Op>(opcode)){
+        case Op::ADD:
+        case Op::NAND: {
+            // R-type: add/nand regA regB dest
+            ErrInfo e = needReg(ir.regA, "regA"); if (e.code!=AsmError::NONE){ r.error=e; return r; }
+            e = needReg(ir.regB, "regB");         if (e.code!=AsmError::NONE){ r.error=e; return r; }
+            e = needReg(ir.dest, "destReg");      if (e.code!=AsmError::NONE){ r.error=e; return r; }
+            r.word = (int32_t)packR(opcode, ir.regA, ir.regB, ir.dest);
+            return r;
+        }
+
+        case Op::LW:
+        case Op::SW: {
+            // I-type: lw/sw regA regB offset(16 บิต)
+            ErrInfo e = needReg(ir.regA, "regA"); if (e.code!=AsmError::NONE){ r.error=e; return r; }
+            e = needReg(ir.regB, "regB");         if (e.code!=AsmError::NONE){ r.error=e; return r; }
+            int off=0;
+            e = getFieldValue(symtab, ir.fieldToken, ir.pc,
+                              /*asOffset16=*/true, /*isBranch=*/false, off);
+            if (e.code!=AsmError::NONE){ r.error=e; return r; }
+            r.word = (int32_t)packI(opcode, ir.regA, ir.regB, off);
+            return r;
+        }
+
+        case Op::BEQ: {
+            // I-type: beq regA regB offset(label) → relative = target - (PC+1)
+            ErrInfo e = needReg(ir.regA, "regA"); if (e.code!=AsmError::NONE){ r.error=e; return r; }
+            e = needReg(ir.regB, "regB");         if (e.code!=AsmError::NONE){ r.error=e; return r; }
+            int off=0;
+            e = getFieldValue(symtab, ir.fieldToken, ir.pc,
+                              /*asOffset16=*/true, /*isBranch=*/true, off);
+            if (e.code!=AsmError::NONE){ r.error=e; return r; }
+            r.word = (int32_t)packI(opcode, ir.regA, ir.regB, off);
+            return r;
+        }
+
+        case Op::JALR: {
+            // J-type: jalr regA regB
+            ErrInfo e = needReg(ir.regA, "regA"); if (e.code!=AsmError::NONE){ r.error=e; return r; }
+            e = needReg(ir.regB, "regB");         if (e.code!=AsmError::NONE){ r.error=e; return r; }
+            r.word = (int32_t)packJ(opcode, ir.regA, ir.regB);
+            return r;
+        }
+
+        case Op::HALT:
+        case Op::NOOP: {
+            // O-type: ไม่มีเรจิสเตอร์/ออฟเซ็ต
+            r.word = (int32_t)packO(opcode);
+            return r;
+        }
+
+        default:
+            r.error = {AsmError::UNKNOWN_OPCODE, "unhandled opcode"};
+            return r;
+    }
 }
 
-// อ่าน symbol table
-vector<Label> readSymbols(const string &filename) {
-    vector<Label> symbols;
-    ifstream in(filename);
-    if (!in.is_open()) throw runtime_error("Cannot open symbols file: " + filename);
-    
-    string line;
-    getline(in, line); //ข้าม header "LabelName Address"
-    
-    string name; 
-    int addr;
-    while (in >> name >> addr)
-        symbols.push_back({name, addr});
-    in.close();
+// ---------------------------------------------------------------------
+// ฟังก์ชันใหม่: loadSymbolTable, loadIR, writeMachineCode 
+// ปฟ.(222) แก้ไขโค้ด เพิ่มฟังก์ชันเข้ามาให้สามารถอ่านไฟล์ที่ parse มาก่อนหน้านี้ แล้วเอาไปแปลงเป็น machine code ต่อได้
 
+unordered_map<string,int> loadSymbolTable(const string& filename){
+    unordered_map<string,int> symbols;
+    ifstream fin(filename);
+    if(!fin){cerr<<"Cannot open symbols file: "<<filename<<"\n";return symbols;}
+    
+    string label; 
+    int addr;
+    string header; 
+    getline(fin,header); // skip header line
+    
+    while(fin>>label>>addr) symbols[label]=addr;
+    
     cout << "\nLoaded " << symbols.size() << " symbols from: " << filename << " \n " << endl;
     cout << "Symbols : \n";
     for (auto &s : symbols)
-        cout << left << s.name << " = " << s.address << endl;
+        cout << left << s.first << " = " << s.second << endl;
 
     return symbols;
+}
+
+vector<IRInstr> loadIR(const string& filename){
+    vector<IRInstr> IR;
+    ifstream fin(filename);
+    if(!fin){cerr<<"Cannot open IR file: "<<filename<<"\n";return IR;}
     
+    cout << "\n-------------------------------------\n";
+    cout << "\nReading IR from: " << filename << endl;
+
+    string header; 
+    getline(fin,header); // skip header
+    string line;
+
+    while(getline(fin,line)){
+        if(line.empty()) continue;
+        IRInstr ir;
+        // อ่าน addr
+        string addrStr; 
+        addrStr = line.substr(0,8);
+        ir.pc = stoi(addrStr);
+
+        // อ่าน label
+        ir.mnemonic = ""; // default
+        string label = line.substr(8,8);
+        label.erase(label.find_last_not_of(" \t")+1);
+        string instr = line.substr(16,8);
+        instr.erase(instr.find_last_not_of(" \t")+1);
+        ir.mnemonic = instr;
+
+        // อ่าน field0/field1/field2 (รวม 24 ตัวอักษร)
+        string f0 = line.substr(24,8); f0.erase(f0.find_last_not_of(" \t")+1);
+        string f1 = line.substr(32,8); f1.erase(f1.find_last_not_of(" \t")+1);
+        string f2 = line.substr(40,8); f2.erase(f2.find_last_not_of(" \t")+1);
+
+        // อ่าน regA/regB/dest/offset/fill (column-based)
+        int regA = stoi(line.substr(48,8));
+        int regB = stoi(line.substr(56,8));
+        int dest = stoi(line.substr(64,8));
+        int off  = stoi(line.substr(72,8));
+        int fillVal = stoi(line.substr(80));
+
+        ir.regA = regA;
+        ir.regB = regB;
+        ir.dest = dest;
+
+        // เลือก fieldToken
+        if(instr==".fill") ir.fieldToken = f0;
+        else if(instr=="lw"||instr=="sw"||instr=="beq") ir.fieldToken = f2;
+        else ir.fieldToken = "";
+
+        IR.push_back(ir);
+    }
+
+    cout << "\n-------------------------------------\n\n";
+    
+    return IR;
+}
+
+void writeMachineCode(const string& filename, const vector<int32_t>& codes) {
+    ofstream fout(filename);
+    if(!fout){
+        cerr<<"Cannot write to "<<filename<<"\n";
+        return;
+    }
+    for(int32_t code : codes)
+        fout<<code<<"\n";
+    fout.close();
+    cout<<"Machine code written to : "<<filename<<"\n";
 }
 
 
-int main() {
-    try {
-        // โหลดข้อมูล symbol และ IR
-        vector<Label> symbols = readSymbols("symbolsTable.txt");
-        vector<IRLine> ir = readIRFile("program.ir", symbols);
 
-        // สร้าง assembler และแปลงเป็น machine code
-        Assembler assem(ir, symbols);
-        vector<int> codes = assem.assembleAll();
+// -----------------------------------------------------------------
+// ปฟ.(222) แก้ main ให้เรียกอ่านไฟล์ที่ได้แล้วเอาไปแปลงเป็น machine code ที่ถูกต้อง
 
-        cout << "Machine code output:\n";
-        for (size_t i = 0; i < codes.size(); ++i)
-            cout << setw(3) << i << ": " << setw(12) << codes[i]
-                 << "   (0x" << hex << uppercase << codes[i] << dec << ")\n";
-        cout << "\n===================================\n";
+int main(){
+    ios::sync_with_stdio(false);
+    cin.tie(nullptr);
 
-        // เขียนลงไฟล์
-        assem.writeMachineFile("machineCode.mc", codes);
-        cout << "Assembling completed successfully!.\n";
-        cout << "Output written to: machineCode.mc\n";
-        cout << "===================================\n";
+    auto symtab = loadSymbolTable("symbolsTable.txt");
+    auto irs = loadIR("program.ir");
 
-    } catch (const exception &e) {
-        cerr << "Exception: " << e.what() << endl;
-        return 1;
+    cout<<"--- Assembling "<<irs.size()<<" instructions ---\n";
+    vector<int32_t> machineCodes;
+
+    cout << "\nMachine code output:\n";
+    
+    for(const auto& ir:irs){
+        EncodeResult res = assemble(symtab, ir);
+        if(res.error.code!=AsmError::NONE){
+            cout<<setw(6)<<ir.mnemonic<<" @PC="<<ir.pc<<" ERROR: "<<res.error.msg<<"\n";
+        }else{
+            machineCodes.push_back(res.word);
+            cout << setw(3) << ir.pc << ": " << setw(12) << res.word
+             << "   (0x" << hex << uppercase << res.word << dec << ")\n";
+        }
     }
+
+    cout << "\n===================================\n";
+
+    cout << "Assembling completed successfully!.\n";
+    writeMachineCode("machineCode.mc", machineCodes);
+    cout << "===================================\n";
+
     return 0;
+
 }

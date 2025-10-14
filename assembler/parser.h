@@ -1,5 +1,5 @@
-#ifndef COMMON_H
-#define COMMON_H
+#ifndef PARSER_H
+#define PARSER_H
 
 #include <string>
 #include <vector>
@@ -60,36 +60,5 @@ private:
     void pass1_buildSymbolTable(bool countBlankLines);
     void pass2_resolve(bool countBlankLines);
 };
-
-// Backend: แปลง IR → machine code (เลขฐาน 10)
-class Assembler {
-public:
-    Assembler(const vector<IRLine>& ir, const vector<Label>& symbols);
-
-    // สร้าง machine code ทั้งโปรแกรม (exit(1) ถ้าเจอ error)
-    vector<int> assembleAll() const;
-
-    // เขียน output เป็นไฟล์เลขฐาน 10 ต่อบรรทัด
-    void writeMachineFile(const string &filename, const vector<int>& codes) const;
-
-private:
-    vector<IRLine> ir;
-    vector<Label> symbols;
-
-    int getOpcode(const string &mnemonic) const;
-    int encodeRType(const IRLine &L) const;
-    int encodeIType(const IRLine &L) const;
-    int encodeJType(const IRLine &L) const;
-    int encodeOType(const IRLine &L) const;
-    int encodeFill(const IRLine &L) const;
-};
-
-bool isNumber(const string &s);
-
-int findLabelAddress(const vector<Label> &symbols, const string &label);
-
-vector<IRLine> readIRFile(const string &filename, const vector<Label> &symbols);
-
-vector<Label> readSymbols(const string &filename);
 
 #endif 
