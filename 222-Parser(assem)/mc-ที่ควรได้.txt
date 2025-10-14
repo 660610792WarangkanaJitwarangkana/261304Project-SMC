@@ -1,0 +1,37 @@
+8454151        # 0: lw 0 1 five 
+9043971        # 1: lw 1 2 3
+655361         # 2: add 1 2 1
+16842754       # 3: beq 0 1 2
+16842749       # 4: beq 0 0 start
+29360128       # 5: noop
+25165824       # 6: halt
+5              # 7: five .fill 5
+-1             # 8: neg1 .fill -1
+2              # 9: stAddr .fill start
+131073         # 10: add 1 2 3
+8454151        # 11: lw 0 1 five
+262145         # 12: beq 0 1 done1
+29360128       # 13: noop
+25165824       # 14: done1 halt
+2097184        # 15: lw 0 1 A
+4194308        # 16: lw 0 2 B
+3              # 17: add 0 0 3
+262144         # 18: beq 2 0 done2
+196611         # 19: add 1 3 3
+131074         # 20: add 2 7 2
+262140         # 21: beq 0 0 loop2
+21217219       # 22: sw 0 3 OUT
+25165824       # 23: halt
+8454151        # 24: lw 0 1 five
+9043960        # 25: lw 1 2 neg1
+655361         # 26: add 1 2 1
+262145         # 27: beq 0 1 done3
+262140         # 28: beq 0 0 loop3
+29360128       # 29: noop
+25165824       # 30: done3 halt
+3              # 31: A .fill 3
+4              # 32: B .fill 4
+0              # 33: OUT .fill 0
+-1             # 34: neg2 .fill -1
+5              # 35: five1 .fill 5
+18             # 36: stAdd1 .fill loop2
