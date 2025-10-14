@@ -1,3 +1,12 @@
+// ปฟ. แก้ชื่อไฟล์เป็น assembler.cpp
+// Build:
+//   g++ -std=c++17 assembler.cpp -o assembler.exe
+//   .\assembler
+// อ่านไฟล์ IR + Symbols ได้แล้ว
+// รันผ่าน + ได้ machine code ที่ถูกต้องแล้ว
+
+
+
 // assembler_backend_week3_fixed.cpp
 // จุดประสงค์ไฟล์:
 //   - สัปดาห์ที่ 3 (Part B): เข้ารหัสคำสั่งเป็น machine code 32 บิต (R/I/J/O + .fill)
@@ -10,12 +19,6 @@
 //   3) ฟังก์ชันเสริม: หา label, แปลงตัวเลข, คำนวณ offset (beq = target-(PC+1))
 //   4) ตรวจ error สำคัญ: opcode ไม่รู้จัก, reg ผิดช่วง, offset เกิน 16-bit, label ไม่มี
 //
-
-
-// ปฟ. แก้ชื่อไฟล์เป็น assembler.cpp
-// Build:
-//   g++ -std=c++17 assembler.cpp -o assembler.exe
-//   .\assembler
 
 #include <iostream>       // cout, cin
 #include <string>         // std::string
