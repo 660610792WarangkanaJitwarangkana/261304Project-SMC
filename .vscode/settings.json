@@ -2,5 +2,6 @@
     "files.associations": {
         "iomanip": "cpp",
         "iosfwd": "cpp"
-    }
+    },
+    "C_Cpp.errorSquiggles": "disabled"
 }
