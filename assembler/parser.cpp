@@ -1,7 +1,7 @@
 // parser.cpp
 // Compile: g++ -std=c++17 parser.cpp -o parser
 
-#include "common.h"
+#include "parser.h"
 #include <fstream>
 #include <sstream>
 #include <unordered_set>
