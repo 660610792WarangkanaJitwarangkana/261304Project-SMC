@@ -27,8 +27,9 @@ public class Simulator {
     // Machine state
     private int pc = 0;
     private int[] regs = new int[NUM_REGS];
-    private int[] mem;
-    private int numMemory = 0;
+    private static final int NUMMEMORY = 65536;
+    private int[] mem = new int[NUMMEMORY];  // instead of sizing to numMemory
+    private int numMemory = 0;               // still track how many lines you loaded
     private boolean halted = false;
 
     public static void main(String[] args) throws Exception {
@@ -61,9 +62,12 @@ public class Simulator {
                 }
             }
             numMemory = lines.size();
-            mem = new int[numMemory];
-            for (int i = 0; i < numMemory; i++) mem[i] = lines.get(i);
-            Arrays.fill(regs, 0);
+            //mem = new int[numMemory];
+            for (int i = 0; i < numMemory; i++) {
+                mem[i] = lines.get(i);
+                System.out.println("memory[" + i + "]=" + mem[i]);  // <— echo 
+                }
+                      Arrays.fill(regs, 0);
             regs[0] = 0; // enforce R0=0
         }
     }
@@ -76,6 +80,7 @@ public class Simulator {
             // Fetch
             if (pc < 0 || pc >= numMemory) {
                 // Out-of-bounds fetch: stop (optional safety)
+                System.err.println("error: pc out of bounds: " + pc);
                 break;
             }
             int instr = mem[pc];
@@ -101,11 +106,19 @@ public class Simulator {
                 }
                 case 2: { // lw
                     int addr = regs[rs] + imm32;
+                        if (addr < 0 || addr >= NUMMEMORY) {
+                            System.err.println("error: lw address out of bounds: " + addr);
+                            break;
+                        }
                     regs[rt] = mem[addr];
                     break;
                 }
                 case 3: { // sw
                     int addr = regs[rs] + imm32;
+                        if (addr < 0 || addr >= NUMMEMORY) {
+                            System.err.println("error: sw address out of bounds: " + addr);
+                            break;
+                        }
                     mem[addr] = regs[rt];
                     break;
                 }
@@ -175,5 +188,7 @@ public class Simulator {
             System.out.println("\t\treg[ " + i + " ] " + regs[i]);
         }
         //end state
+        System.out.println("end state");
+        System.out.println(" ");
     }
 }
