@@ -9,4 +9,4 @@
 ## Run
 ```bash
 python utils/assembler_helper.py      # แปลง .asm เป็น .mc
-python simulator/simulator.py programs/multiply.mc   # รัน simulator
+java -cp .\Simulator Simulator ".\programs asm\factorialmem.mc"   # รัน simulator
