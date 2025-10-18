@@ -1,7 +1,0 @@
-LabelName Address   
-fact      3         
-base      11        
-end       12        
-N         15        
-NEG1      16        
-TMP       17        

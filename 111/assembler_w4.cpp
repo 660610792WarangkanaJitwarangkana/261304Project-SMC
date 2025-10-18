@@ -85,22 +85,22 @@ constexpr int REGB_SHIFT   = 16;
 inline uint32_t packR(int opcode, int rA, int rB, int dest) {
     // R-type: ช่องท้ายสุดใช้เพียง 3 บิตสำหรับ destReg
     return (uint32_t(opcode) << OPCODE_SHIFT)
-         | (uint32_t(rA)     << REGA_SHIFT)
-         | (uint32_t(rB)     << REGB_SHIFT)
-         | (uint32_t(dest) & 0x7u);
+        | (uint32_t(rA)     << REGA_SHIFT)
+        | (uint32_t(rB)     << REGB_SHIFT)
+        | (uint32_t(dest) & 0x7u);
 }
 inline uint32_t packI(int opcode, int rA, int rB, int offset16) {
     // I-type: 16 บิตท้ายใช้เก็บ offset แบบ two's complement
     return (uint32_t(opcode) << OPCODE_SHIFT)
-         | (uint32_t(rA)     << REGA_SHIFT)
-         | (uint32_t(rB)     << REGB_SHIFT)
-         | (uint32_t(offset16) & 0xFFFFu); // mask 16 บิตล่างให้ชัดเจน
+        | (uint32_t(rA)     << REGA_SHIFT)
+        | (uint32_t(rB)     << REGB_SHIFT)
+        | (uint32_t(offset16) & 0xFFFFu); // mask 16 บิตล่างให้ชัดเจน
 }
 inline uint32_t packJ(int opcode, int rA, int rB) {
     // J-type: ใช้แค่ opcode + regA + regB, ที่เหลือ (16 บิต) เป็น 0
     return (uint32_t(opcode) << OPCODE_SHIFT)
-         | (uint32_t(rA)     << REGA_SHIFT)
-         | (uint32_t(rB)     << REGB_SHIFT);
+        | (uint32_t(rA)     << REGA_SHIFT)
+        | (uint32_t(rB)     << REGB_SHIFT);
 }
 inline uint32_t packO(int opcode) {
     // O-type: ใช้เฉพาะ opcode, ที่เหลือทั้งหมดเป็น 0
@@ -174,7 +174,7 @@ ErrInfo parseNumber(const string& token, long long& outVal){
 
 // หา address ของ label จาก symbol table (ไม่เจอ → error)
 ErrInfo findLabel(const unordered_map<string,int>& symtab,
-                  const string& label, int& outAddr){
+                const string& label, int& outAddr){
     auto it = symtab.find(label);
     if (it==symtab.end()) return {AsmError::UNDEFINED_LABEL, "undefined label: " + label};
     outAddr = it->second; return {AsmError::NONE,""};
@@ -185,8 +185,8 @@ ErrInfo findLabel(const unordered_map<string,int>& symtab,
 //   - isBranch=true    → beq: offset = labelAddr - (PC+1) (relative)
 //   - isBranch=false   → lw/sw/.fill: ใช้ “address ตรง ๆ” ถ้าเป็น label
 ErrInfo getFieldValue(const unordered_map<string,int>& symtab,
-                      const string& token, int currentPC,
-                      bool asOffset16, bool isBranch, int& outVal){
+                    const string& token, int currentPC,
+                    bool asOffset16, bool isBranch, int& outVal){
     long long val=0;
     string t = rtrim(token);
 
@@ -328,7 +328,7 @@ int assembleProgram(const unordered_map<string,int>& symtab,
         if (res.error.code != AsmError::NONE) {
             // รายงาน PC และคำสั่งเพื่อให้ debug ตรงจุดได้ง่าย
             cerr << "ERROR at PC=" << ir.pc
-                 << " (" << ir.mnemonic << "): " << res.error.msg << "\n";
+                << " (" << ir.mnemonic << "): " << res.error.msg << "\n";
             return 1; // หยุดทันทีตามสเปก
         }
         // เขียนเป็นเลขฐาน 10 หนึ่งค่า/บรรทัดตามข้อกำหนด
@@ -339,10 +339,10 @@ int assembleProgram(const unordered_map<string,int>& symtab,
         }
 
         cout << "(address " << ir.pc << "): " 
-             << res.word << " (hex 0x"
-             << hex << uppercase << setw(0)
-             << ((uint32_t)res.word & 0xFFFFFFFF)
-             << dec << ")\n";
+            << res.word << " (hex 0x"
+            << hex << uppercase << setw(0)
+            << ((uint32_t)res.word & 0xFFFFFFFF)
+            << dec << ")\n";
     }
     return 0; // สำเร็จครบทุกบรรทัด
 }

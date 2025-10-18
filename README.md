@@ -10,3 +10,4 @@
 ```bash
 python utils/assembler_helper.py      # แปลง .asm เป็น .mc
 java -cp .\Simulator Simulator ".\programs asm\factorialmem.mc"   # รัน simulator
+java -cp .\Simulator Simulator ".\programs asm\factorialmem.mc" > test.txt  # รัน simulator in new file
