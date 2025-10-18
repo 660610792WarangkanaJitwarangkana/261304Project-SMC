@@ -303,18 +303,12 @@ int main() {
     cout << "\n\nParsing...";
     cout << "\n-------------------------------------\n";
 
-    // -------------------------------------------------------------
-    // แสดง Symbol Table
-    // -------------------------------------------------------------
     cout << "Symbol Table:\n";
     for (auto &sym : parser.getSymbols()) {
         cout << "  " << setw(10) << left << sym.name
              << "-> Address: " << sym.address << endl;
     }
 
-    // -------------------------------------------------------------
-    // แสดงผล Instruction ทั้งหมดที่ parser แยกได้
-    // -------------------------------------------------------------
     cout << "\nParsed Instructions:\n";
     auto insts = parser.getIR();
     for (auto &inst : insts) {
@@ -327,15 +321,12 @@ int main() {
              << endl;
     }
 
-    cout << "\nTest finished.\n";
-
     parser.writeIRFile("program.ir");       // สร้างไฟล์ IR สำหรับ assembler
     parser.writeSymbolsFile("symbolsTable.txt"); // สร้างไฟล์ symbol table
 
-    cout << "\n===============================\n";
-    cout << "Parsing completed successfully!.\n";
-    cout << "Output written to: program.ir";
-    cout << "\n===============================\n";
+    cout << "\n--------------------------------------------------\n";
+    cout << "Parse success!.\n";
+    cout << "Output written to : program.ir and symbolsTable.txt" ;
 
     return 0;
 }
