@@ -1,5 +1,5 @@
         lw      0   1   N
-        lw      0   6   FACTADDR
+        lw      0   6   FACT
         jalr    6   7
         sw      0   3   OUT         ; save result in memory
         halt
@@ -10,7 +10,7 @@ factorial   beq     1   0   base_case
             sw      0   1   SAVEN
             lw      0   2   NEG1
             add     1   2   1
-            lw      0   6   FACTADDR
+            lw      0   6   FACT
             jalr    6   7
             lw      0   1   SAVEN
             add     0   0   4
