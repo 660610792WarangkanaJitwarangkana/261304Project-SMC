@@ -1,26 +1,26 @@
-        lw      0       1       N
-        lw      0       6       FACTAD
-        jalr    6       7
-        sw      0       3       OUT
+        lw      0   1   N
+        lw      0   6   FACTADDR
+        jalr    6   7
+        sw      0   3   OUT         ; save result in memory
         halt
 
 ; factorial(n)
-FACTOR  beq     1       0       BASE
-        sw      0       1       SAVEN
-        lw      0       2       NEG1
-        add     1       2       1
-        lw      0       6       FACTAD
-        jalr    6       7
-        lw      0       1       SAVEN
-        add     0       0       4
 
-MULT    beq     1       0       MULTD
-        add     4       3       4
-        lw      0       2       NEG1
-        add     1       2       1
-        beq     0       0       MULT
-MULTD   add     0       4       3
-        jalr    7       6
+factorial   beq     1   0   base_case
+            sw      0   1   SAVEN
+            lw      0   2   NEG1
+            add     1   2   1
+            lw      0   6   FACTADDR
+            jalr    6   7
+            lw      0   1   SAVEN
+            add     0   0   4
+mult_loop   beq     1   0   mult_done
+            add     4   3   4
+            lw      0   2   NEG1
+            add     1   2   1
+            beq     0   0   mult_loop
+mult_done   add     0   4   3
+            jalr    7   6
 
 BASE    add     0       0       3
         add     3       3       3
