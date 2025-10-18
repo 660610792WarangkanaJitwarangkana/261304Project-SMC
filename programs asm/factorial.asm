@@ -3,6 +3,7 @@ jalr    6   7            ; call factorial (r6 = PC+1, jump to r7)
 halt                     ; stop program after returning from factorial
 
 ; factorial function
+
 ; input : r1 = n
 ; output: r3 = factorial(n)
 ; registers: 
@@ -25,7 +26,7 @@ base    add     0   0   3        ; r3 = 1
 end     jalr    7   6            ; return to caller (PC = r6)
         noop                     ; safe filler instruction
         halt                     ; ensure simulator stops (safety stop)
-        
+
 N       .fill   3
 NEG1    .fill   -1
 TMP     .fill   0
