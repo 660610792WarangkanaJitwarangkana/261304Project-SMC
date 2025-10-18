@@ -1,42 +1,54 @@
-        lw      0       1       N
-        lw      0       6       FACTAD
-        jalr    6       7
-        halt
+# factorial_recursive_memory.asm
+# fact(n): return n! stored in R1
 
-; factorial(n): input r1=n, output r3=fact(n)
+# Register ใช้ดังนี้:
+# R0 = 0
+# R1 = return value
+# R2 = n
+# R3 = temp
+# R4 = temp
+# R6 = stack pointer (SP)
+# R7 = return address
 
-FACTOR  beq     1       0       BASE
+    ADDI R2, R0, 5      # n = 5
+    ADDI R6, R0, 100     # SP = 100 (top of memory stack)
+    JAL R0, fact         # เรียก fact(n)
+    HALT
 
-        sw      0       1       SAVEN
-        sw      0       7       SAVER7
+# -------------------
+fact:
+    # base case: if n <= 1 → return 1
+    BLE R2, R0, base_case
+    ADDI R3, R0, 1
+    BEQ R2, R3, base_case
 
-        lw      0       2       NEG1
-        add     1       2       1
-        lw      0       6       FACTAD
-        jalr    6       7
+    # push return address (address after call)
+    ADDI R7, R0, after_call
+    SW R7, 0(R6)
+    ADDI R6, R6, -1
 
-        lw      0       1       SAVEN
-        lw      0       7       SAVER7
+    # push current n
+    SW R2, 0(R6)
+    ADDI R6, R6, -1
 
-        add     0       3       4
-        add     0       0       3
-        add     0       1       2
+    # recursive call: fact(n-1)
+    ADDI R2, R2, -1
+    JAL R0, fact
 
-MULT    beq     2       0       MULTD
-        add     3       4       3
-        lw      0       5       NEG1
-        add     2       5       2
-        beq     0       0       MULT
+after_call:
+    # pop n
+    ADDI R6, R6, 1
+    LW R4, 0(R6)
 
-MULTD   jalr    7       6
+    # compute result = n * result
+    MUL R1, R1, R4
 
-BASE    lw      0       3       ONE
-        jalr    7       6
+    # pop return address
+    ADDI R6, R6, 1
+    LW R7, 0(R6)
 
-; Data
-N       .fill   3
-NEG1    .fill   -1
-ONE     .fill   1
-SAVEN   .fill   0
-SAVER7  .fill   0
-FACTAD  .fill   FACTOR
+    JAL R0, R7           # return to caller
+
+base_case:
+    ADDI R1, R0, 1       # result = 1
+    JAL R0, R7           # return

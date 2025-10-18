@@ -1,9 +1,5 @@
-# =========================================
-#  Test Cases for Multiply Program :
-#  - ทดสอบโปรแกรมคูณเลข 2 จำนวน
-#  - Input:  A (r1), B (r2)
-#  - Output: ผลลัพธ์อยู่ใน r3 หรือ memory[OUT]
-# =========================================
+#  Test Cases for Multiply Program ทดสอบโปรแกรมคูณเลข 2 จำนวน
+#  - Input:  A (r1), B (r2) Output: ผลลัพธ์อยู่ใน r3 หรือ memory[OUT]
 
 # Case 1: Normal case 
 # การคูณเลขบวกทั่วไป

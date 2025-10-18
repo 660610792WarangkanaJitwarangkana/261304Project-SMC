@@ -1,9 +1,7 @@
-# =========================================
 #  Test Cases for Factorial Program :
 #  - ทดสอบโปรแกรม factorial (n!)
 #  - Input:  n (r1 หรือ memory[N])
 #  - Output: ผลลัพธ์อยู่ใน r3 หรือ memory[OUT]
-# =========================================
 
 # Case 1: Base case
 # n = 0 → factorial(0) = 1
