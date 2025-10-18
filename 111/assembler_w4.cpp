@@ -337,6 +337,12 @@ int assembleProgram(const unordered_map<string,int>& symtab,
             cerr << "ERROR: write failed at PC=" << ir.pc << "\n";
             return 1;
         }
+
+        cout << "(address " << ir.pc << "): " 
+             << res.word << " (hex 0x"
+             << hex << uppercase << setw(0)
+             << ((uint32_t)res.word & 0xFFFFFFFF)
+             << dec << ")\n";
     }
     return 0; // สำเร็จครบทุกบรรทัด
 }
