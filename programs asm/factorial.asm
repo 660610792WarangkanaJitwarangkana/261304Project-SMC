@@ -1,8 +1,7 @@
-main    lw      0   1   N        ; r1 = n
-        jalr    6   7            ; call factorial (r6 = PC+1, jump to r7)
-        halt                     ; stop program after returning from factorial
+lw      0   1   N        ; r1 = n
+jalr    6   7            ; call factorial (r6 = PC+1, jump to r7)
+halt                     ; stop program after returning from factorial
 
-;--------------------------------------------
 ; factorial function
 ; input : r1 = n
 ; output: r3 = factorial(n)
@@ -21,10 +20,12 @@ fact    beq     1   0   base     ; if n == 0 → base case
         lw      0   2   TMP      ; r2 = factorial(n-1)
         add     3   2   3        ; result = factorial(n-1) + n (simplified multiply)
         beq     0   0   end
+
 base    add     0   0   3        ; r3 = 1
 end     jalr    7   6            ; return to caller (PC = r6)
         noop                     ; safe filler instruction
         halt                     ; ensure simulator stops (safety stop)
+        
 N       .fill   3
 NEG1    .fill   -1
 TMP     .fill   0
