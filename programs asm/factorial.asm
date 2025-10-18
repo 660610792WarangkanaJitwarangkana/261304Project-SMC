@@ -11,6 +11,7 @@
 ;   r3 = result
 ;   r6 = return address
 ;   r7 = function address (fact)
+
 fact    beq     1   0   base     ; if n == 0 → base case
         lw      0   2   NEG1     ; r2 = -1
         add     1   2   1        ; n = n - 1

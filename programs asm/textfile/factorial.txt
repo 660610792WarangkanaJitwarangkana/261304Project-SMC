@@ -1,0 +1,59 @@
+factorial.asm
+โปรแกรมตัวอย่าง: แสดงโครงสร้าง recursive ด้วย jalr (pseudo-recursive)
+***หมายเหตุ: เป็นเวอร์ชัน "สาธิต recursion" โดยใช้ jalr เป็นหลัก
+
+โค้ดนี้ไม่ได้คูณจริง (ใช้การจัดการผลลัพธ์แบบตัวอย่าง)
+    ; r1 = n (input), r3 = result (output)
+    ;
+    ; Layout:
+    ; 0: โหลด n (จาก label N) --> r1
+    ; 1: jalr 6 7  (call fact function at address in r7, save return addr in r6)
+    ; 2: halt
+    ;
+    ; function fact: (label fact)
+    ;  - check base case: if n==0 -> set r3=1 and return
+    ;  - else decrement n, recursive call, then combine result
+    ;
+
+Registers used (convention for this program):
+    - r1: current n (input)
+    - r2: temp (used for -1, or to store intermediate)
+    - r3: result (factorial result expected to be here after return)
+    - r6: return address register (used by jalr to store PC+1)
+    - r7: function address register (holds address of 'fact' to jalr to)
+
+Memory labels at end:
+    - N    .fill <initial n>
+    - NEG1 .fill -1
+    - TMP  .fill 0              ; spare / storage
+
+        lw      0   1   N       ; r1 = N         ; load input n into r1
+        jalr    6   7           ; call factorial: r6 = PC+1, PC = r7
+                                ; -> ใช้ jalr แบบ: r[rd] = PC+1 ; PC = r[rs]
+                                ; โดยที่ r7 ต้องเก็บ address ของ label fact ก่อนรัน (ขึ้นอยู่กับ assembler)
+        halt                    ; หยุดโปรแกรมหลังเรียกฟังก์ชันกลับมา (ค่าผลลัพธ์คาดไว้ใน r3)
+
+factorial function (label: 'fact')
+อธิบาย:
+    - ตรวจ base case (n == 0) ด้วย beq r1, r0, base
+    - ถ้าไม่ใช่ base: ลด n ลง 1 (ใช้ .fill NEG1 เป็น -1, add r1, r2, r1)
+    - jalr เพื่อเรียก recursive call (อีกครั้ง jump ไปที่ r7)
+    - หลัง return: restore/load ค่า n (จาก memory N) และค่า factorial(n-1) จาก TMP
+    - combine ผล (ที่นี่เป็นตัวอย่างใช้ add แทน multiply เพื่อความเรียบง่าย)
+
+fact    beq     1   0   base     ; if r1 == 0 goto base   ; ตรวจ base case (0! = 1)
+        lw      0   2   NEG1     ; r2 = -1                ; โหลดค่า -1 จาก memory (NEG1)
+        add     1   2   1        ; r1 = r1 + (-1)         ; n = n - 1
+        jalr    6   7            ; recursive call         ; r6 = PC+1 ; PC = r7 (call again)
+                                 ; หลัง jalr จะมาที่ beginning ของ fact อีกครั้ง
+        lw      0   1   N        ; restore n from memory N ; restore original n (ถ้า assembler/approach ต้องโหลดกลับ)
+        lw      0   2   TMP      ; r2 = factorial(n-1)    ; สมมติผลของ recursive stored at TMP
+        add     3   2   3        ; r3 = r3 + r2           ; combine — NOTE: this is illustrative (not real multiply)
+                                 ; ถ้าต้องการคำนวณ factorial จริง ต้อง implement multiplication logic
+        beq     0   0   end      ; unconditional jump to end (branch always true)
+base    add     0   0   3        ; r3 = 1                 ; base case: set result = 1
+end     jalr    7   6            ; return                 ; swap registers to return: r7 = PC+1 ; PC = r6
+                                 ; (วิธีนี้ใช้ jalr เพื่อ return โดยเปลี่ยนตำแหน่ง rs/rd)
+N       .fill   3                ; initial n (example)    ; เปลี่ยนค่าเพื่อทดสอบกรณีต่าง ๆ
+NEG1    .fill   -1               ; constant -1
+TMP     .fill   0                ; temporary storage for recursive result
