@@ -29,21 +29,11 @@ bool isNumber(const string &s) {
 
 static bool validLabelName(const string &s) {
     if (s.empty()) return false;
-
-    // เงื่อนไขตัวแรก: ต้องเป็นตัวอักษร (ถ้าอยากให้ขึ้นต้นด้วย '_' ด้วย ให้ดูหมายเหตุด้านล่าง)
     if (!isalpha((unsigned char)s[0])) return false;
-
-    // เพดานความยาว: ปรับตามนโยบาย (31 กำลังดี)
-    if (s.size() > 31) return false;
-
-    // ตัวถัด ๆ ไป อนุญาต a-z A-Z 0-9 และ '_'  <<<<<  สำคัญ!
-    for (size_t i = 1; i < s.size(); ++i) {
-        unsigned char c = (unsigned char)s[i];
-        if (!(isalnum(c) || c == '_')) return false;
-    }
+    if (s.size() > 6) return false;
+    for (char c: s) if (!isalnum((unsigned char)c)) return false;
     return true;
 }
-
 
 void dieError(const string &msg) {
     cerr << "Error: " << msg << "\n";
@@ -86,34 +76,15 @@ void Parser::readAllLines(const string &filename, const string &commentChars) {
 }
 
 
-#define DEBUG_PARSE 1
-
 void Parser::pass1_buildSymbolTable(bool countBlankLines) {
     ir.clear();
     symbols.clear();
     unordered_map<string,int> labelToAddr;
     int addr = 0;
-
     for (size_t lineno = 0; lineno < rawLines.size(); ++lineno) {
         string line = rawLines[lineno];
-
-#if DEBUG_PARSE
-        cerr << "[DEBUG] src line " << (lineno+1) << " raw: \"" << line << "\"\n";
-#endif
-
-        // Tokenize (เว้นวรรคคั่น)
+        // Tokenize
         vector<string> toks = tokenize_ws(line);
-
-#if DEBUG_PARSE
-        if (!toks.empty()) {
-            cerr << "        tokens:";
-            for (auto &tk : toks) cerr << " [" << tk << "]";
-            cerr << "\n";
-        } else {
-            cerr << "        (blank or comment-only line)\n";
-        }
-#endif
-
         bool isBlank = toks.empty();
         IRLine L;
         L.address = addr;
@@ -123,28 +94,17 @@ void Parser::pass1_buildSymbolTable(bool countBlankLines) {
                 // treat blank line as noop (instr="noop"), no label
                 L.instr = "noop";
                 L.rawLabel = "";
-#if DEBUG_PARSE
-                cerr << "        -> countBlankLines=true => emit NOOP @addr " << addr << "\n";
-#endif
             } else {
                 // skip blanks entirely (do not consume address)
-#if DEBUG_PARSE
-                cerr << "        -> skip blank (no addr consumed)\n";
-#endif
                 continue;
             }
         } else {
             // non-blank tokens exist. Determine if first token is label or mnemonic
             string first = toks[0];
             bool firstIsMnemonic = (MNEMONICS.find(first) != MNEMONICS.end());
-
             if (!firstIsMnemonic) {
                 // label present
-#if DEBUG_PARSE
-                cerr << "        candidate label: \"" << first << "\"  (checking validLabelName...)\n";
-#endif
                 if (!validLabelName(first)) {
-                    // <<<<< จุดที่อยากเห็น log ก่อน throw (มีแล้วข้างบน)
                     throw runtime_error("invalid label name '" + first + "' at source line " + to_string(lineno+1));
                 }
                 if (labelToAddr.find(first) != labelToAddr.end()) {
@@ -153,41 +113,21 @@ void Parser::pass1_buildSymbolTable(bool countBlankLines) {
                 labelToAddr[first] = addr;
                 symbols.push_back({first, addr});
                 L.rawLabel = first;
-
                 // instruction and fields follow if present
                 if (toks.size() >= 2) L.instr = toks[1];
                 if (toks.size() >= 3) L.f0 = toks[2];
                 if (toks.size() >= 4) L.f1 = toks[3];
                 if (toks.size() >= 5) L.f2 = toks[4];
-
-#if DEBUG_PARSE
-                cerr << "        -> label OK, addr=" << addr
-                     << " ; instr=" << L.instr
-                     << " ; f0=" << L.f0
-                     << " ; f1=" << L.f1
-                     << " ; f2=" << L.f2 << "\n";
-#endif
             } else {
-                // no label: แปลว่า token แรกคือ mnemonic
+                // no label
                 L.rawLabel = "";
                 L.instr = first;
                 if (toks.size() >= 2) L.f0 = toks[1];
                 if (toks.size() >= 3) L.f1 = toks[2];
                 if (toks.size() >= 4) L.f2 = toks[3];
-
-#if DEBUG_PARSE
-                cerr << "        mnemonic-first: instr=" << L.instr
-                     << " ; f0=" << L.f0
-                     << " ; f1=" << L.f1
-                     << " ; f2=" << L.f2 << "\n";
-#endif
             }
         }
-
         ir.push_back(L);
-#if DEBUG_PARSE
-        cerr << "        -> emit IR @addr=" << addr << " (advance PC)\n";
-#endif
         addr++;
     }
 }
@@ -353,14 +293,13 @@ void Parser::writeSymbolsFile(const string &outname) const {
     ofs.close();
 }
 
-
 int main() {
-    string inputFile = "factorialmem.asm";   // ไฟล์ assembly สำหรับเทส
+    string inputFile = "test(assembly-language).asm";   // ไฟล์ assembly สำหรับเทส
 
     Parser parser;                   // สร้างอ็อบเจ็กต์ parser
     parser.parseFile(inputFile);     // เรียกฟังก์ชันหลักเพื่ออ่านและแยกข้อมูล
 
-    cout << "\n\nParsing...";
+    cout << "\nParsing...";
     cout << "\n-------------------------------------\n";
 
     cout << "Symbol Table:\n";
