@@ -1,0 +1,19 @@
+addr    label   instr   field0  field1  field2    regA    regB    dest    offset16  fillValue 
+0               lw      0       1       N         0       1       0       15        0         
+1               jalr    6       7                 6       7       0       0         0         
+2               halt                              0       0       0       0         0         
+3       fact    beq     1       0       base      1       0       0       7         0         
+4               lw      0       2       NEG1      0       2       0       16        0         
+5               add     1       2       1         1       2       1       0         0         
+6               jalr    6       7                 6       7       0       0         0         
+7               lw      0       1       N         0       1       0       15        0         
+8               lw      0       2       TMP       0       2       0       17        0         
+9               add     3       2       3         3       2       3       0         0         
+10              beq     0       0       end       0       0       0       1         0         
+11      base    add     0       0       3         0       0       3       0         0         
+12      end     jalr    7       6                 7       6       0       0         0         
+13              noop                              0       0       0       0         0         
+14              halt                              0       0       0       0         0         
+15      N       .fill   3                         0       0       0       0         3         
+16      NEG1    .fill   -1                        0       0       0       0         -1        
+17      TMP     .fill   0                         0       0       0       0         0         
