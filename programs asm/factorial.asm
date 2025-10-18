@@ -6,6 +6,7 @@ halt                     ; stop program after returning from factorial
 
 ; input : r1 = n
 ; output: r3 = factorial(n)
+
 ; registers: 
 ;   r1 = n
 ;   r2 = temp
