@@ -76,10 +76,21 @@ public class Simulator {
         }
     }
 
+    private static final int MAX_STEPS = 1_000_000;
+    private int steps = 0;
+
     /** Main simulation loop */
     private void run() {
         while (true) {
             printState(); // before executing each instruction
+
+            // Step-limit guard (before fetch)
+            if (++steps > MAX_STEPS) {
+                System.err.println("possible infinite loop (exceeded " + MAX_STEPS + " steps)");
+                // print one more state before exit, per project rules
+                printState();
+                break; // or return;
+            }
 
             // Fetch
             if (pc < 0 || pc >= numMemory) {
@@ -177,7 +188,7 @@ public class Simulator {
         return num;
     }
 
-    /** Print machine state in the project’s required format */
+    /** Print machine state in the project required format */
     private void printState() {
         System.out.println("@@@");
         System.out.println("state:");
