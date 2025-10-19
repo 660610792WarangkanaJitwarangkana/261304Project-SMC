@@ -1,4 +1,4 @@
-; Factorial Program for SMC Architecture 
+; Factorial Program for SMC Architecture (fixed: reload r6 before each recursive call)
 ; r1 = n (input), ผลลัพธ์สุดท้ายอยู่ใน r3 แล้วเก็บลง OUT
 
         lw      0       1       N       ; r1 = n
@@ -17,7 +17,7 @@ FACTOR  beq     1       0       BASE    ; if (n==0) goto BASE
         ; --- factorial(n-1) ---
         lw      0       2       NEG1    ; r2 = -1
         add     1       2       1       ; n = n - 1
-        ; r6 ยังชี้ FACTOR อยู่แล้วจาก caller ไม่ต้องโหลดใหม่
+        lw      0       6       FACTAD  ; *** critical: reload r6 = &FACTOR ***
         jalr    6       7               ; call factorial(n-1) → r3
 
         ; --- Restore state ---

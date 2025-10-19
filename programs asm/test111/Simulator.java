@@ -1,7 +1,9 @@
+
 import java.io.*;
 import java.util.*;
 
 class Main {
+
     public static void main(String[] args) throws Exception {
         Simulator.main(args);  // pass through "machine_code.txt"
     }
@@ -11,19 +13,16 @@ class Main {
  * SMC Simulator (8 regs, 32-bit, word-addressed) — filename via main(args)
  * Usage: java Simulator <machine-code.txt>
  *
- * - One signed 32-bit decimal per line in the input file.
- * - numMemory = number of lines.
- * - Registers init to 0; R0 is always 0 (writes ignored).
- * - PC starts at 0.
- * - printState is called before each instruction executes, and once more before exit.
- * - I-type offsets are 16-bit two's complement; sign-extended at runtime.
- * Opcodes (bits 24..22): add=000, nand=001, lw=010, sw=011, beq=100, jalr=101, halt=110, noop=111
+ * - One signed 32-bit decimal per line in the input file. - numMemory = number
+ * of lines. - Registers init to 0; R0 is always 0 (writes ignored). - PC starts
+ * at 0. - printState is called before each instruction executes, and once more
+ * before exit. - I-type offsets are 16-bit two's complement; sign-extended at
+ * runtime. Opcodes (bits 24..22): add=000, nand=001, lw=010, sw=011, beq=100,
+ * jalr=101, halt=110, noop=111
  */
-
 //  usage
 //     - java Simulator <factorial.mc> 
 //     - java Simulator factorial.mc > new file name <fact_sim.txt>
-
 public class Simulator {
 
     private static final int NUM_REGS = 8;
@@ -46,7 +45,9 @@ public class Simulator {
         sim.run();
     }
 
-    /** Load machine code (one integer per line) from a file path */
+    /**
+     * Load machine code (one integer per line) from a file path
+     */
     private void loadFromFile(String path) throws IOException {
         try (BufferedReader br = new BufferedReader(new FileReader(path))) {
             ArrayList<Integer> lines = new ArrayList<>();
@@ -55,8 +56,10 @@ public class Simulator {
             while ((s = br.readLine()) != null) {
                 lineNo++;
                 s = s.trim();
-                if (s.isEmpty()) continue;                  // allow blank lines
-                String first = s.split("\\s+")[0];          // tolerate trailing comments/tokens
+                if (s.isEmpty()) {
+                    continue;                  // allow blank lines
+
+                                }String first = s.split("\\s+")[0];          // tolerate trailing comments/tokens
                 try {
                     int val = Integer.parseInt(first);
                     lines.add(val);
@@ -70,13 +73,16 @@ public class Simulator {
             for (int i = 0; i < numMemory; i++) {
                 mem[i] = lines.get(i);
                 System.out.println("memory[" + i + "]=" + mem[i]);  // <— echo 
-                }
-                      Arrays.fill(regs, 0);
+            }
+            Arrays.fill(regs, 0);
             regs[0] = 0; // enforce R0=0
         }
     }
 
-    /** Main simulation loop */
+    /**
+     * Main simulation loop
+     */
+    //private static final boolean VERBOSE = false; 
     private void run() {
         while (true) {
             printState(); // before executing each instruction
@@ -91,11 +97,11 @@ public class Simulator {
 
             // Decode
             int opcode = (instr >>> 22) & 0x7;
-            int rs     = (instr >>> 19) & 0x7;
-            int rt     = (instr >>> 16) & 0x7;
-            int rd     =  instr         & 0x7;     // R-type dest
-            int imm16  =  instr         & 0xFFFF;  // I-type raw
-            int imm32  = convertNum(imm16);        // sign-extend 16->32
+            int rs = (instr >>> 19) & 0x7;
+            int rt = (instr >>> 16) & 0x7;
+            int rd = instr & 0x7;     // R-type dest
+            int imm16 = instr & 0xFFFF;  // I-type raw
+            int imm32 = convertNum(imm16);        // sign-extend 16->32
 
             int nextPC = pc + 1; // default advance
 
@@ -110,19 +116,19 @@ public class Simulator {
                 }
                 case 2: { // lw
                     int addr = regs[rs] + imm32;
-                        if (addr < 0 || addr >= NUMMEMORY) {
-                            System.err.println("error: lw address out of bounds: " + addr);
-                            break;
-                        }
+                    if (addr < 0 || addr >= NUMMEMORY) {
+                        System.err.println("error: lw address out of bounds: " + addr);
+                        break;
+                    }
                     regs[rt] = mem[addr];
                     break;
                 }
                 case 3: { // sw
                     int addr = regs[rs] + imm32;
-                        if (addr < 0 || addr >= NUMMEMORY) {
-                            System.err.println("error: sw address out of bounds: " + addr);
-                            break;
-                        }
+                    if (addr < 0 || addr >= NUMMEMORY) {
+                        System.err.println("error: sw address out of bounds: " + addr);
+                        break;
+                    }
                     mem[addr] = regs[rt];
                     break;
                 }
@@ -169,7 +175,9 @@ public class Simulator {
         }
     }
 
-    /** Sign-extend 16-bit value to 32-bit */
+    /**
+     * Sign-extend 16-bit value to 32-bit
+     */
     private static int convertNum(int num) {
         if ((num & (1 << 15)) != 0) {
             num -= (1 << 16);
@@ -177,7 +185,9 @@ public class Simulator {
         return num;
     }
 
-    /** Print machine state in the project’s required format */
+    /**
+     * Print machine state in the project’s required format
+     */
     private void printState() {
         System.out.println("@@@");
         System.out.println("state:");
