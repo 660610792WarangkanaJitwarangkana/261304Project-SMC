@@ -1,5 +1,5 @@
-// parser.cpp
-// Compile: g++ -std=c++17 parser.cpp -o parser
+// Compile : g++ -std=c++17 parser.cpp -o parser 
+// Run : .\parser
 
 #include "parser.h"
 #include <fstream>
@@ -23,7 +23,7 @@ static const unordered_set<string> MNEMONICS = {
 bool isNumber(const string &s) {
     if (s.empty()) return false;
     size_t i = 0;
-    if (s[0] == '+' || s[0] == '-') i = 1;          // รองรับทั้ง + และะ -
+    if (s[0] == '+' || s[0] == '-') i = 1;  // รองรับทั้ง + และะ -
     if (i == s.size()) return false;                
     for (; i < s.size(); ++i) 
         if (!isdigit((unsigned char)s[i])) return false;
@@ -176,7 +176,6 @@ void Parser::pass2_resolve(bool countBlankLines) {
         }
 
         // แยกข้อมูลตามชนิดคำสั่ง
-
         // .fill ใช้ใส่ค่าตัวเลขหรือตำแหน่ง label ลงใน memory
         if (m == ".fill") {
             L.isFill = true;
@@ -397,3 +396,4 @@ int main() {
 
     return 0;
 }
+
