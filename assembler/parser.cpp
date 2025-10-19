@@ -36,7 +36,7 @@ static bool validLabelName(const string &s) {
     if (!isalpha((unsigned char)s[0])) return false;    // ต้องขึ้นต้นด้วยตัวอักษร
     if (s.size() > 6) return false;                     // ความยาวไม่เกิน 6 ตัวอักษร
     for (char c: s)                                     
-        if (!isalnum((unsigned char)c)) return false;   // ตัวอักษรที่เหลือเป็นตัวอักษรหรือตัวเลข
+        if (!isalnum((unsigned char)c)) return false;   // ตัวอักษรที่เหลือเป็นตัวอักษรหรือตัวเลขก็ได้
     return true;
 }
 
@@ -91,7 +91,7 @@ void Parser::pass1_buildSymbolTable(bool countBlankLines) {
     symbols.clear();
     unordered_map<string,int> labelToAddr;
     int addr = 0;
-    
+
     for (size_t lineno = 0; lineno < rawLines.size(); ++lineno) {
         string line = rawLines[lineno];
         vector<string> toks = tokenize_ws(line);
@@ -99,37 +99,48 @@ void Parser::pass1_buildSymbolTable(bool countBlankLines) {
         IRLine L;
         L.address = addr;
 
-        if (isBlank) {
-            if (countBlankLines) {
-                // treat blank line as noop (instr="noop"), no label
+        // เป็นบรรทัดว่าง
+        if (isBlank) {  
+            if (countBlankLines) {  
+                // จะนับช่องว่างก็ต่อเมื่อคำสั่งเป็น noop และไม่มี label
                 L.instr = "noop";
                 L.rawLabel = "";
             } else {
-                // skip blanks entirely (do not consume address)
+                // ถ้าไม่คำสั่งหรืออะไรในบรรทัดเลยก็ข้ามบรรทัดนี้ไปเลย ไม่ต้องเก็บ address
                 continue;
             }
-        } else {
-            // non-blank tokens exist. Determine if first token is label or mnemonic
+
+        // ไม่ใช่บรรทัดว่าง    
+        } else {        
+            // เช็คว่า tokens ที่เก็บมาตัวแรกเป็น label หรือ mnemonic
             string first = toks[0];
             bool firstIsMnemonic = (MNEMONICS.find(first) != MNEMONICS.end());
-            if (!firstIsMnemonic) {
-                // label present
+            
+            // ถ้าตัวแรกเป็น label ไม่ใช่ mnemonic
+            if (!firstIsMnemonic) {   
+
+                // เช็ค validity ของ label ว่าถูกต้องมั้ย
                 if (!validLabelName(first)) {
                     throw runtime_error("invalid label name '" + first + "' at source line " + to_string(lineno+1));
                 }
+
+                // เช็คว่ามี label ซ้ำรึเปล่า
                 if (labelToAddr.find(first) != labelToAddr.end()) {
                     throw runtime_error("duplicate label '" + first + "' at source line " + to_string(lineno+1));
                 }
+
                 labelToAddr[first] = addr;
                 symbols.push_back({first, addr});
                 L.rawLabel = first;
-                // instruction and fields follow if present
+
+                // ถ้ามี instruction ตามหลัง label
                 if (toks.size() >= 2) L.instr = toks[1];
                 if (toks.size() >= 3) L.f0 = toks[2];
                 if (toks.size() >= 4) L.f1 = toks[3];
                 if (toks.size() >= 5) L.f2 = toks[4];
+
+            // ไม่มี label ตัวแรกเป็น mnemonic เลย    
             } else {  
-                // no label
                 L.rawLabel = "";
                 L.instr = first;
                 if (toks.size() >= 2) L.f0 = toks[1];
@@ -137,6 +148,7 @@ void Parser::pass1_buildSymbolTable(bool countBlankLines) {
                 if (toks.size() >= 4) L.f2 = toks[3];
             }
         }
+
         ir.push_back(L);
         addr++;
     }
@@ -144,13 +156,15 @@ void Parser::pass1_buildSymbolTable(bool countBlankLines) {
 
 // pass2: resolve operand, registers, offsets
 void Parser::pass2_resolve(bool countBlankLines) {
-    // build label map for fast lookup
+
+    // สร้าง map ของ label กับ address เพื่อ lookup เร็วขึ้น
     unordered_map<string,int> labelToAddr;
     for (const auto &lab : symbols) labelToAddr[lab.name] = lab.address;
 
     for (size_t i = 0; i < ir.size(); ++i) {
         IRLine &L = ir[i];
         string m = L.instr;
+        
         if (m.empty()) {
             // should not happen: in pass1 we either skipped blank lines or converted to noop
             throw runtime_error("missing instruction at address " + to_string(L.address));
