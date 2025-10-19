@@ -1,5 +1,3 @@
-// assembler.cpp
-
 #include <iostream>      // พิมพ์ข้อความ/ผลลัพธ์พื้นฐาน
 #include <string>        // std::string
 #include <vector>        // std::vector
