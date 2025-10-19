@@ -61,6 +61,7 @@ constexpr int OPCODE_SHIFT = 22;
 constexpr int REGA_SHIFT   = 19;
 constexpr int REGB_SHIFT   = 16;
 
+
 // ฟังก์ชัน pack บิตสำหรับแต่ละฟอร์แมต (ลด duplicate โค้ด)
 inline uint32_t packR(int opcode, int rA, int rB, int dest) {
     // R-type: ช่องท้ายสุดใช้เพียง 3 บิตสำหรับ destReg
