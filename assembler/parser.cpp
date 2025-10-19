@@ -14,32 +14,39 @@
 
 using namespace std;
 
+// set ของ mnemonic(ชื่อคำสั่ง assembly)ที่ valid
 static const unordered_set<string> MNEMONICS = {
     "add","nand","lw","sw","beq","jalr","halt","noop", ".fill"
 };
 
+// เช็คว่าค่าที่รับเข้ามาเป็นตัวเลขมั้ย
 bool isNumber(const string &s) {
     if (s.empty()) return false;
     size_t i = 0;
-    if (s[0] == '+' || s[0] == '-') i = 1;
-    if (i == s.size()) return false;
-    for (; i < s.size(); ++i) if (!isdigit((unsigned char)s[i])) return false;
+    if (s[0] == '+' || s[0] == '-') i = 1;          // รองรับทั้ง + และะ -
+    if (i == s.size()) return false;                
+    for (; i < s.size(); ++i) 
+        if (!isdigit((unsigned char)s[i])) return false;
     return true;
 }
 
+// เช็คว่ารูปแบบของ label ถูกต้องตามเงื่อนไขมั้ย
 static bool validLabelName(const string &s) {
     if (s.empty()) return false;
-    if (!isalpha((unsigned char)s[0])) return false;
-    if (s.size() > 6) return false;
-    for (char c: s) if (!isalnum((unsigned char)c)) return false;
+    if (!isalpha((unsigned char)s[0])) return false;    // ต้องขึ้นต้นด้วยตัวอักษร
+    if (s.size() > 6) return false;                     // ความยาวไม่เกิน 6 ตัวอักษร
+    for (char c: s)                                     
+        if (!isalnum((unsigned char)c)) return false;   // ตัวอักษรที่เหลือเป็นตัวอักษรหรือตัวเลข
     return true;
 }
 
+// ถ้ามี error ให้แสดงใน terminal แล้ว exit
 void dieError(const string &msg) {
     cerr << "Error: " << msg << "\n";
     exit(1);
 }
 
+// แยก string เป็น tokens ตาม whitespace
 static vector<string> tokenize_ws(const string &s) {
     vector<string> toks;
     istringstream iss(s);
@@ -51,13 +58,15 @@ static vector<string> tokenize_ws(const string &s) {
 
 Parser::Parser() {}
 
+// อ่านไฟล์ทั้งหมดและตัด comment ออก
 void Parser::readAllLines(const string &filename, const string &commentChars) {
     rawLines.clear();
     ifstream ifs(filename);
     if (!ifs.is_open()) throw runtime_error("cannot open input file: " + filename);
     string line;
     while (getline(ifs, line)) {
-        // strip newline already done; remove comment starting at any of commentChars
+        
+        // ตัด comment ออกถ้ามี commentChars อยู่
         if (!commentChars.empty()) {
             size_t pos = string::npos;
             for (char cc : commentChars) {
@@ -69,21 +78,22 @@ void Parser::readAllLines(const string &filename, const string &commentChars) {
             }
             if (pos != string::npos) line = line.substr(0, pos);
         }
-        // keep raw line (may be blank or whitespace-only)
+
+        // เก็บ raw line (อาจเป็น blank line หรือ whitespace)
         rawLines.push_back(line);
     }
     ifs.close();
 }
 
-
+// pass1: สร้าง symbol table และ IR preliminary
 void Parser::pass1_buildSymbolTable(bool countBlankLines) {
     ir.clear();
     symbols.clear();
     unordered_map<string,int> labelToAddr;
     int addr = 0;
+    
     for (size_t lineno = 0; lineno < rawLines.size(); ++lineno) {
         string line = rawLines[lineno];
-        // Tokenize
         vector<string> toks = tokenize_ws(line);
         bool isBlank = toks.empty();
         IRLine L;
@@ -118,7 +128,7 @@ void Parser::pass1_buildSymbolTable(bool countBlankLines) {
                 if (toks.size() >= 3) L.f0 = toks[2];
                 if (toks.size() >= 4) L.f1 = toks[3];
                 if (toks.size() >= 5) L.f2 = toks[4];
-            } else {
+            } else {  
                 // no label
                 L.rawLabel = "";
                 L.instr = first;
@@ -132,6 +142,7 @@ void Parser::pass1_buildSymbolTable(bool countBlankLines) {
     }
 }
 
+// pass2: resolve operand, registers, offsets
 void Parser::pass2_resolve(bool countBlankLines) {
     // build label map for fast lookup
     unordered_map<string,int> labelToAddr;
@@ -148,6 +159,7 @@ void Parser::pass2_resolve(bool countBlankLines) {
             throw runtime_error("invalid opcode '" + m + "' at address " + to_string(L.address));
         }
 
+        // .fill
         if (m == ".fill") {
             L.isFill = true;
             if (L.f0.empty()) throw runtime_error(".fill without operand at address " + to_string(L.address));
@@ -161,6 +173,7 @@ void Parser::pass2_resolve(bool countBlankLines) {
             continue;
         }
 
+        // R-type: add, nand
         if (m == "add" || m == "nand") {
             if (L.f0.empty() || L.f1.empty() || L.f2.empty()) throw runtime_error("R-type instruction missing field at address " + to_string(L.address));
             if (!isNumber(L.f0) || !isNumber(L.f1) || !isNumber(L.f2)) throw runtime_error("R-type registers must be numeric at address " + to_string(L.address));
@@ -220,6 +233,7 @@ void Parser::pass2_resolve(bool countBlankLines) {
             continue;
         }
 
+        // halt, noop ไม่มี field
         if (m == "halt" || m == "noop") {
             // no fields required
             continue;
