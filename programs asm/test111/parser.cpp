@@ -345,7 +345,7 @@ void Parser::writeSymbolsFile(const string &outname) const {
     ofs.close();
 }
 
-int main() {
+/*int main() {
     string inputFile = "test(assembly-language).asm";   // ไฟล์ assembly สำหรับเทส
 
     Parser parser;                   // สร้างอ็อบเจ็กต์ parser
@@ -370,14 +370,56 @@ int main() {
              << setw(6) << left << inst.f1 << " | "
              << setw(6) << left << inst.f2
              << endl;
+    } */
+
+    //parser.parseFile(inputFile, /*countBlankLines=*/false, /*commentChars=*/";#");
+    //parser.writeSymbolsFile("symbolsTable.txt"); // สร้างไฟล์ symbol table
+
+    //cout << "\n--------------------------------------------------\n";
+    //cout << "Parse success!.\n";
+    //cout << "Output written to : program.ir and symbolsTable.txt" ;
+
+    //return 0;
+    int main(int argc, char** argv) {
+    // เลือกไฟล์อินพุตจาก argv หรือใช้ดีฟอลต์เป็น factorialmem.asm
+    string inputFile = (argc >= 2) ? string(argv[1]) : "factorialmem.asm";
+
+    Parser parser;
+    try {
+        // อย่านับบรรทัดว่าง และตัดคอมเมนต์ที่ขึ้นต้นด้วย ; หรือ #
+        parser.parseFile(inputFile, /*countBlankLines=*/false, /*commentChars=*/";#");
+
+        cout << "\nParsing...\n-------------------------------------\n";
+
+        cout << "Symbol Table:\n";
+        for (auto &sym : parser.getSymbols()) {
+            cout << "  " << setw(10) << left << sym.name
+                 << "-> Address: " << sym.address << endl;
+        }
+
+        cout << "\nParsed Instructions:\n";
+        auto insts = parser.getIR();
+        for (auto &inst : insts) {
+            cout << "  " << "Address " << setw(3) << inst.address << " | "
+                 << setw(6) << left << inst.rawLabel << " | "
+                 << setw(6) << left << inst.instr << " | "
+                 << setw(6) << left << inst.f0 << " | "
+                 << setw(6) << left << inst.f1 << " | "
+                 << setw(6) << left << inst.f2
+                 << endl;
+        }
+
+        parser.writeIRFile("program.ir");
+        parser.writeSymbolsFile("symbolsTable.txt");
+
+        cout << "\n--------------------------------------------------\n";
+        cout << "Parse success!\n";
+        cout << "Output written to : program.ir and symbolsTable.txt\n";
+        return 0;
+    } catch (const std::exception& e) {
+        cerr << "Error: " << e.what() << "\n";
+        return 1;
     }
-
-    parser.parseFile(inputFile, /*countBlankLines=*/false, /*commentChars=*/";#");       // สร้างไฟล์ IR สำหรับ assembler
-    parser.writeSymbolsFile("symbolsTable.txt"); // สร้างไฟล์ symbol table
-
-    cout << "\n--------------------------------------------------\n";
-    cout << "Parse success!.\n";
-    cout << "Output written to : program.ir and symbolsTable.txt" ;
-
-    return 0;
 }
+
+

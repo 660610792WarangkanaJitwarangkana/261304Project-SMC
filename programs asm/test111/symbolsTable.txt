@@ -1,6 +1,12 @@
 LabelName Address   
-start     2         
-done      6         
-five      7         
-neg1      8         
-stAddr    9         
+FACTOR    5         
+MULT      17        
+MULTD     21        
+BASE      22        
+N         24        
+ONE       25        
+NEG1      26        
+SAVEN     27        
+SAVER7    28        
+OUT       29        
+FACTAD    30        
