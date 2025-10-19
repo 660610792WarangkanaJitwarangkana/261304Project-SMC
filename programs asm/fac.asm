@@ -1,54 +1,50 @@
-# factorial_recursive_memory.asm
-# fact(n): return n! stored in R1
+        ; --- main ---
+        lw R1, N(R0)       ; load n
+        lw R7, SP_INIT(R0) ; initialize stack pointer
+        jalr FACT_ADDR(R0), R5   ; call factorial: store return addr in R5, jump to FACT_ADDR
+        ; after return, result in R6 (ตาม convention)
+        sw R6, FACT_RESULT(R0)
+        halt
 
-# Register ใช้ดังนี้:
-# R0 = 0
-# R1 = return value
-# R2 = n
-# R3 = temp
-# R4 = temp
-# R6 = stack pointer (SP)
-# R7 = return address
-
-    ADDI R2, R0, 5      # n = 5
-    ADDI R6, R0, 100     # SP = 100 (top of memory stack)
-    JAL R0, fact         # เรียก fact(n)
-    HALT
-
-# -------------------
-fact:
-    # base case: if n <= 1 → return 1
-    BLE R2, R0, base_case
-    ADDI R3, R0, 1
-    BEQ R2, R3, base_case
-
-    # push return address (address after call)
-    ADDI R7, R0, after_call
-    SW R7, 0(R6)
-    ADDI R6, R6, -1
-
-    # push current n
-    SW R2, 0(R6)
-    ADDI R6, R6, -1
-
-    # recursive call: fact(n-1)
-    ADDI R2, R2, -1
-    JAL R0, fact
-
-after_call:
-    # pop n
-    ADDI R6, R6, 1
-    LW R4, 0(R6)
-
-    # compute result = n * result
-    MUL R1, R1, R4
-
-    # pop return address
-    ADDI R6, R6, 1
-    LW R7, 0(R6)
-
-    JAL R0, R7           # return to caller
-
-base_case:
-    ADDI R1, R0, 1       # result = 1
-    JAL R0, R7           # return
+; --- factorial function at label FACT_ADDR ---
+; expects input n in R1
+; returns result in R6
+FACT_ADDR:
+        beq R1, R0, FACT_BASE   ; if n == 0 return 1
+        ; -- recursive case --
+        ; save caller-saved registers and return-address R5 onto stack
+        add R7, R7, R4         ; R4 holds NEG1 (decrement SP) -> SP = SP - 1
+        sw R5, 0(R7)           ; store return address
+        add R7, R7, R4
+        sw R1, 0(R7)           ; store n (current)
+        ; compute n-1
+        add R1, R1, NEGONE_REG ; R1 = R1 - 1
+        ; call FACT_ADDR recursively
+        jalr FACT_ADDR_REG, R5 ; need function address in FACT_ADDR_REG, R5 will get return addr
+        ; after return: result in R6
+        ; restore n
+        lw R1, 0(R7)
+        add R7, R7, R5_CONST   ; add SP +1 (pop) ; (R5_CONST==1)
+        lw R5, 0(R7)           ; restore return address
+        add R7, R7, R5_CONST   ; adjust SP back (pop)
+        ; multiply: result = n * R6 (where R6 currently holds factorial(n-1))
+        ; original n is now in R1
+        ; we need to compute R6 = R1 * R6 -> call multiplication routine or inline loop
+        ; For brevity, do repeated-add multiplication inline using R2,R3,R4,R5 as temps
+        lw R5, ONE(R0)         ; load one
+        lw R4, NEGONE(R0)      ; load -1
+        lw R2, ZERO(R0)
+        add R3, R3, R3         ; (ensure R3=0)  -- but better set R3=0 by lw
+        lw R3, ZERO(R0)        ; R3 = 0  (accumulator)
+MulLoop:
+        beq R6, R0, MulDone    ; if multiplier (R6) == 0 done
+        add R3, R3, R1         ; R3 += n
+        add R6, R6, R4         ; R6 -= 1
+        beq R0, R0, MulLoop
+MulDone:
+        add R6, R3, R0         ; move product to R6 (return reg)
+        jalr R5, R0            ; return using saved return address in R5  (but careful with R0)
+        ; note: better to do `jalr R5, R4` to jump to R5 and overwrite R4
+FACT_BASE:
+        lw R6, ONE(R0)         ; return 1
+        jalr R5, R4            ; return (jump back to address in R5)
