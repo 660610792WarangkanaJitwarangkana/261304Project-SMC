@@ -1,4 +1,5 @@
 # test ตามรายละเอียด project ของอาจารย์
+
         lw 0 1 five     load reg1 with 5 (uses symbolic address)
         lw 1 2 3        load reg2 with -1 (uses numeric address)
 start   add 1 2 1       decrement reg1
