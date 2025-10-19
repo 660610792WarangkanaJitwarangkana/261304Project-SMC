@@ -1,5 +1,3 @@
-// assembler.cpp
-
 #include <iostream>      // พิมพ์ข้อความ/ผลลัพธ์พื้นฐาน
 #include <string>        // std::string
 #include <vector>        // std::vector
@@ -60,7 +58,6 @@ static const unordered_map<string, Op> OPCODE_MAP = {
 constexpr int OPCODE_SHIFT = 22;
 constexpr int REGA_SHIFT   = 19;
 constexpr int REGB_SHIFT   = 16;
-
 
 // ฟังก์ชัน pack บิตสำหรับแต่ละฟอร์แมต (ลด duplicate โค้ด)
 inline uint32_t packR(int opcode, int rA, int rB, int dest) {
