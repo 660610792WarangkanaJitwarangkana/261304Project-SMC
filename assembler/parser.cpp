@@ -1,5 +1,5 @@
-// parser.cpp
-// Compile: g++ -std=c++17 parser.cpp -o parser
+// Compile : g++ -std=c++17 parser.cpp -o parser 
+// Run : .\parser
 
 #include "parser.h"
 #include <fstream>
@@ -14,7 +14,7 @@
 
 using namespace std;
 
-// set ของ mnemonic(ชื่อคำสั่ง assembly)ที่ valid
+// set ของ mnemonic ที่เก็บ opcode(ชื่อคำสั่ง) ที่ valid
 static const unordered_set<string> MNEMONICS = {
     "add","nand","lw","sw","beq","jalr","halt","noop", ".fill"
 };
@@ -23,7 +23,7 @@ static const unordered_set<string> MNEMONICS = {
 bool isNumber(const string &s) {
     if (s.empty()) return false;
     size_t i = 0;
-    if (s[0] == '+' || s[0] == '-') i = 1;          // รองรับทั้ง + และะ -
+    if (s[0] == '+' || s[0] == '-') i = 1;  // รองรับทั้ง + และะ -
     if (i == s.size()) return false;                
     for (; i < s.size(); ++i) 
         if (!isdigit((unsigned char)s[i])) return false;
@@ -106,7 +106,7 @@ void Parser::pass1_buildSymbolTable(bool countBlankLines) {
                 L.instr = "noop";
                 L.rawLabel = "";
             } else {
-                // ถ้าไม่คำสั่งหรืออะไรในบรรทัดเลยก็ข้ามบรรทัดนี้ไปเลย ไม่ต้องเก็บ address
+                // ถ้าไม่มีคำสั่งหรืออะไรในบรรทัดเลยก็ข้ามบรรทัดนี้ไปเลย ไม่ต้องเก็บ address
                 continue;
             }
 
@@ -164,24 +164,33 @@ void Parser::pass2_resolve(bool countBlankLines) {
     for (size_t i = 0; i < ir.size(); ++i) {
         IRLine &L = ir[i];
         string m = L.instr;
-        
+
+        // ถ้าช่องคำสั่งว่างมีแค่ label แต่ไม่มีคำสั่ง (ไม่ควรเกิดขึ้น) 
         if (m.empty()) {
-            // should not happen: in pass1 we either skipped blank lines or converted to noop
             throw runtime_error("missing instruction at address " + to_string(L.address));
         }
+
+        // เช็คว่า opcode(คำสั่ง) ถูกต้องมั้ย
         if (MNEMONICS.find(m) == MNEMONICS.end()) {
             throw runtime_error("invalid opcode '" + m + "' at address " + to_string(L.address));
         }
 
-        // .fill
+        // แยกข้อมูลตามชนิดคำสั่ง
+        // .fill ใช้ใส่ค่าตัวเลขหรือตำแหน่ง label ลงใน memory
         if (m == ".fill") {
             L.isFill = true;
-            if (L.f0.empty()) throw runtime_error(".fill without operand at address " + to_string(L.address));
-            if (isNumber(L.f0)) {
+            // ไม่มี field1 (f0) ตามหลัง
+            if (L.f0.empty()) 
+                throw runtime_error(".fill without operand at address " + to_string(L.address));
+            // ถ้าเป็นตัวเลข เก็บเลขนั้นลงใน mem
+            if (isNumber(L.f0)) {   
                 long long v = stoll(L.f0);
                 L.fillValue = static_cast<int>(v);
+            // ถ้าเป็นชื่อ label ให้หา address ของ label น้้นๆ
             } else {
-                if (labelToAddr.find(L.f0) == labelToAddr.end()) throw runtime_error("undefined label '" + L.f0 + "' used in .fill at address " + to_string(L.address));
+                // ถ้าไม่มีใน list ของ label ที่เคยเก็บแสดงว่า error
+                if (labelToAddr.find(L.f0) == labelToAddr.end()) 
+                    throw runtime_error("undefined label '" + L.f0 + "' used in .fill at address " + to_string(L.address));
                 L.fillValue = labelToAddr[L.f0];
             }
             continue;
@@ -189,8 +198,13 @@ void Parser::pass2_resolve(bool countBlankLines) {
 
         // R-type: add, nand
         if (m == "add" || m == "nand") {
-            if (L.f0.empty() || L.f1.empty() || L.f2.empty()) throw runtime_error("R-type instruction missing field at address " + to_string(L.address));
-            if (!isNumber(L.f0) || !isNumber(L.f1) || !isNumber(L.f2)) throw runtime_error("R-type registers must be numeric at address " + to_string(L.address));
+            // ไล่เช็คว่ามีครบทุก field มั้ย
+            if (L.f0.empty() || L.f1.empty() || L.f2.empty()) 
+                throw runtime_error("R-type instruction missing field at address " + to_string(L.address));
+            // เช็คว่าทุก field เป็นเลขมั้ย
+            if (!isNumber(L.f0) || !isNumber(L.f1) || !isNumber(L.f2)) 
+                throw runtime_error("R-type registers must be numeric at address " + to_string(L.address));
+            // แปลงเป็น int แล้วเช็ค reg ว่าอยู่ในช่วง 0–7 มั้ย
             L.regA = stoi(L.f0);
             L.regB = stoi(L.f1);
             L.dest = stoi(L.f2);
@@ -199,61 +213,85 @@ void Parser::pass2_resolve(bool countBlankLines) {
             continue;
         }
 
+        // I-type: lw, sw
         if (m == "lw" || m == "sw") {
-            if (L.f0.empty() || L.f1.empty() || L.f2.empty()) throw runtime_error("lw/sw missing field at address " + to_string(L.address));
-            if (!isNumber(L.f0) || !isNumber(L.f1)) throw runtime_error("lw/sw regA/regB must be numeric at address " + to_string(L.address));
+            // ไล่เช็คว่ามีครบทุก field มั้ย
+            if (L.f0.empty() || L.f1.empty() || L.f2.empty()) 
+                throw runtime_error("lw/sw missing field at address " + to_string(L.address));
+            // เช็คว่า regA, regB เป็นตัวเลขมั้ย
+            if (!isNumber(L.f0) || !isNumber(L.f1)) 
+                throw runtime_error("lw/sw regA/regB must be numeric at address " + to_string(L.address));
+            // แปลงเป็น int แล้วเช็ค reg ว่าอยู่ในช่วง 0–7 มั้ย    
             L.regA = stoi(L.f0);
             L.regB = stoi(L.f1);
-            if (L.regA < 0 || L.regA > 7 || L.regB < 0 || L.regB > 7) throw runtime_error("register out of range (0..7) at address " + to_string(L.address));
+            if (L.regA < 0 || L.regA > 7 || L.regB < 0 || L.regB > 7) 
+                throw runtime_error("register out of range (0..7) at address " + to_string(L.address));
+            // ถ้า offset เป็นตัวเลข ให้แปลงค่าแล้วเช็คว่าอยู่ในช่วง 16 บิต
             if (isNumber(L.f2)) {
                 long long v = stoll(L.f2);
-                if (v < -32768 || v > 32767) throw runtime_error("offset out of 16-bit range for lw/sw at address " + to_string(L.address));
+                if (v < -32768 || v > 32767) 
+                    throw runtime_error("offset out of 16-bit range for lw/sw at address " + to_string(L.address));
                 L.offset16 = static_cast<int>(v);
+            // ถ้า offset เป็น label ให้แทน label ด้วย addr แล้วเช็คว่า addr อยู่ในช่วง 16 บิต มั้ย้
             } else {
-                if (labelToAddr.find(L.f2) == labelToAddr.end()) throw runtime_error("undefined label '" + L.f2 + "' used in lw/sw at address " + to_string(L.address));
+                if (labelToAddr.find(L.f2) == labelToAddr.end()) 
+                    throw runtime_error("undefined label '" + L.f2 + "' used in lw/sw at address " + to_string(L.address));
                 int addrLabel = labelToAddr[L.f2];
-                if (addrLabel < -32768 || addrLabel > 32767) throw runtime_error("label address out of 16-bit range for lw/sw at address " + to_string(L.address));
+                if (addrLabel < -32768 || addrLabel > 32767) 
+                    throw runtime_error("label address out of 16-bit range for lw/sw at address " + to_string(L.address));
                 L.offset16 = addrLabel;
             }
             continue;
         }
 
+        // Branch: beq
         if (m == "beq") {
-            if (L.f0.empty() || L.f1.empty() || L.f2.empty()) throw runtime_error("beq missing field at address " + to_string(L.address));
+            // ไล่เช็คความถูกต้องเหมือน I-type
+            if (L.f0.empty() || L.f1.empty() || L.f2.empty()) 
+                throw runtime_error("beq missing field at address " + to_string(L.address));
             if (!isNumber(L.f0) || !isNumber(L.f1)) throw runtime_error("beq regA/regB must be numeric at address " + to_string(L.address));
             L.regA = stoi(L.f0);
             L.regB = stoi(L.f1);
-            if (L.regA < 0 || L.regA > 7 || L.regB < 0 || L.regB > 7) throw runtime_error("register out of range (0..7) at address " + to_string(L.address));
+            if (L.regA < 0 || L.regA > 7 || L.regB < 0 || L.regB > 7) 
+                throw runtime_error("register out of range (0..7) at address " + to_string(L.address));
             if (isNumber(L.f2)) {
                 long long v = stoll(L.f2);
-                if (v < -32768 || v > 32767) throw runtime_error("beq numeric offset out of 16-bit range at address " + to_string(L.address));
+                if (v < -32768 || v > 32767) 
+                    throw runtime_error("beq numeric offset out of 16-bit range at address " + to_string(L.address));
                 L.offset16 = static_cast<int>(v);
+            // ถ้า offset เป็น label ให้คำนวณ offset แบบ relative คือ address(label) - (address(ปัจจุบัน) + 1)
             } else {
-                if (labelToAddr.find(L.f2) == labelToAddr.end()) throw runtime_error("undefined label '" + L.f2 + "' used in beq at address " + to_string(L.address));
+                if (labelToAddr.find(L.f2) == labelToAddr.end()) 
+                    throw runtime_error("undefined label '" + L.f2 + "' used in beq at address " + to_string(L.address));
                 int addrLabel = labelToAddr[L.f2];
                 long long offset = static_cast<long long>(addrLabel) - (static_cast<long long>(L.address) + 1LL);
-                if (offset < -32768 || offset > 32767) throw runtime_error("beq offset out of range for label '" + L.f2 + "' at address " + to_string(L.address));
+                if (offset < -32768 || offset > 32767) 
+                    throw runtime_error("beq offset out of range for label '" + L.f2 + "' at address " + to_string(L.address));
                 L.offset16 = static_cast<int>(offset);
             }
             continue;
         }
 
+        // J-type: jalr
         if (m == "jalr") {
-            if (L.f0.empty() || L.f1.empty()) throw runtime_error("jalr missing field at address " + to_string(L.address));
-            if (!isNumber(L.f0) || !isNumber(L.f1)) throw runtime_error("jalr registers must be numeric at address " + to_string(L.address));
+            // เช็ค field regA regB เหมือน I-type
+            if (L.f0.empty() || L.f1.empty()) 
+                throw runtime_error("jalr missing field at address " + to_string(L.address));
+            if (!isNumber(L.f0) || !isNumber(L.f1)) 
+                throw runtime_error("jalr registers must be numeric at address " + to_string(L.address));
             L.regA = stoi(L.f0);
             L.regB = stoi(L.f1);
-            if (L.regA < 0 || L.regA > 7 || L.regB < 0 || L.regB > 7) throw runtime_error("register out of range (0..7) at address " + to_string(L.address));
+            if (L.regA < 0 || L.regA > 7 || L.regB < 0 || L.regB > 7) 
+                throw runtime_error("register out of range (0..7) at address " + to_string(L.address));
             continue;
         }
 
-        // halt, noop ไม่มี field
+        // O-type: halt, noop ไม่มี field
         if (m == "halt" || m == "noop") {
-            // no fields required
             continue;
         }
 
-        // unreachable
+        // instruction ที่ไม่รู้จัก
         throw runtime_error("unhandled instruction '" + m + "' at address " + to_string(L.address));
     }
 }
@@ -262,7 +300,6 @@ void Parser::parseFile(const string &filename, bool countBlankLines, const strin
     readAllLines(filename, commentChars);
     pass1_buildSymbolTable(countBlankLines);
     pass2_resolve(countBlankLines);
-    // build symbols vector is already done in pass1
 }
 
 const vector<IRLine>& Parser::getIR() const { return ir; }
@@ -324,8 +361,8 @@ void Parser::writeSymbolsFile(const string &outname) const {
 int main() {
     string inputFile = "test(assembly-language).asm";   // ไฟล์ assembly สำหรับเทส
 
-    Parser parser;                   // สร้างอ็อบเจ็กต์ parser
-    parser.parseFile(inputFile);     // เรียกฟังก์ชันหลักเพื่ออ่านและแยกข้อมูล
+    Parser parser;                   
+    parser.parseFile(inputFile);                        // เรียกฟังก์ชันหลักเพื่ออ่านและแยกข้อมูล
 
     cout << "\nParsing...";
     cout << "\n-------------------------------------\n";
@@ -348,12 +385,15 @@ int main() {
              << endl;
     }
 
-    parser.writeIRFile("program.ir");       // สร้างไฟล์ IR สำหรับ assembler
-    parser.writeSymbolsFile("symbolsTable.txt"); // สร้างไฟล์ symbol table
+    string baseName = "program";
+
+    parser.writeIRFile(baseName + ".ir");               // สร้างไฟล์ IR สำหรับ assembler
+    parser.writeSymbolsFile(baseName + "_symbols.txt"); // สร้างไฟล์ symbol table
 
     cout << "\n--------------------------------------------------\n";
-    cout << "Parse success!.\n";
-    cout << "Output written to : program.ir and symbolsTable.txt" ;
+    cout << "Parse success!\n";
+    cout << "Output written to: " << baseName << ".ir and " << baseName << "_symbols.txt\n";
 
     return 0;
 }
+

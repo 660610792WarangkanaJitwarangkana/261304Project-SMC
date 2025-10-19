@@ -444,7 +444,7 @@ int main(int argc, char** argv){
 
     // ดีฟอลต์ชื่อไฟล์ (สามารถส่งเองผ่าน argv)
     string irPath  = (argc >= 2 ? argv[1] : "program.ir");
-    string symPath = (argc >= 3 ? argv[2] : "symbolsTable.txt");
+    string symPath = (argc >= 3 ? argv[2] : "program_symbols.txt");
     string outPath = (argc >= 4 ? argv[3] : "machineCode.mc");
 
     // โหลดข้อมูลที่จำเป็น
