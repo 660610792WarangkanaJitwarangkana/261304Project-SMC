@@ -1,4 +1,10 @@
 // assembler.cpp
+/*ภาพรวมการทำงาน (Overall)
+โค้ดนี้คือ “ตัวแอสเซมเบลอร์ส่วน B” ที่รับ Symbol Table กับ IR ที่ parse แล้ว (มาจากส่วน A) แล้ว
+เดินทีละคำสั่ง (IR row)
+แปลงเป็นคำสั่งเครื่อง 32 บิตตามรูปแบบบิตที่กำหนด (R/I/J/O)
+ตรวจ error ต่าง ๆ (label ไม่มี, offset เกิน 16 บิต, เรจิสเตอร์ผิดช่วง ฯลฯ)
+เขียนผลเป็น เลขฐานสิบบรรทัดละ 1 ค่า ลงไฟล์ .mc และพิมพ์ log (ทั้งฐานสิบและ hex) ออกทาง stdout/stderr*/
 
 #include <iostream>      // พิมพ์ข้อความ/ผลลัพธ์พื้นฐาน
 #include <string>        // std::string
@@ -16,7 +22,8 @@ using namespace std;
 
 // ---------- ยูทิลพื้นฐานเล็ก ๆ (คุณภาพชีวิต) ----------
 
-// rtrim: ตัดช่องว่างขวาสุดของสตริง (กันปัญหาช่องว่างเจือปนจากไฟล์คอลัมน์คงที่)
+// rtrim: ตัดช่องว่าง(space/tab/newline)ทางขวาสุดของสตริง (กันปัญหาช่องว่างปนจากไฟล์คอลัมน์คงที่)
+// ใช้ find_if จากท้ายไปหน้าเพื่อหาตำแหน่งตัวอักษรตัวสุดท้ายที่ “ไม่ใช่ช่องว่าง” แล้ว erase ส่วนเกิน
 static inline string rtrim(string s) {
     auto it = find_if(s.rbegin(), s.rend(), [](unsigned char ch){return !isspace(ch);});
     s.erase(it.base(), s.end());
@@ -24,13 +31,16 @@ static inline string rtrim(string s) {
 }
 
 // safeSubstr: substr แบบปลอดภัย (ถ้า pos เกินความยาว ให้คืน "" เพื่อกัน out_of_range)
+//ใช้ตอน “ตัดคอลัมน์คงที่” จากไฟล์ IR
 static inline string safeSubstr(const string& s, size_t pos, size_t len) {
     if (pos >= s.size()) return "";
     len = min(len, s.size() - pos);
     return s.substr(pos, len);
 }
 
-// tryParseInt: แปลงสตริงเป็น int (รองรับฐาน 10/16 แบบ auto) ถ้าพังให้ false
+// tryParseInt: แปลงสตริงเป็น int (รองรับฐาน 10/16 ด้วย stoll base 0 (แบบ auto) ) 
+// ถ้าพังให้ false (ถ้ามีขยะต่อท้าย, เกินช่วง int32, หรือแปลงไม่ได้)
+// ใช้ตอนอ่านคอลัมน์เลข (เช่น regA/regB/dest) ในไฟล์ IR
 static bool tryParseInt(const string& s, int& out) {
     try {
         size_t p=0; long long v = stoll(rtrim(s), &p, 0); // base 0 => auto (0x.. เป็น hex)
@@ -43,6 +53,9 @@ static bool tryParseInt(const string& s, int& out) {
 
 // -------------------- Opcodes และ mapping --------------------
 // หมายเหตุ: .fill เป็น "directive" ไม่ใช่ instruction จึง set เป็น -1
+/* กำหนดรหัสคำสั่ง add=0, nand=1, lw=2, sw=3, beq=4, jalr=5, halt=6, noop=7
+.fill ไม่ใช่ instruction → ใช้ค่า -1 เพื่อบอกว่าเป็น directive
+OPCODE_MAP ช่วยแปลง mnemonic (สตริง) → Op ได้รวดเร็ว*/
 enum class Op : int {
     ADD=0, NAND=1, LW=2, SW=3, BEQ=4, JALR=5, HALT=6, NOOP=7, FILL=-1
 };
@@ -57,33 +70,37 @@ static const unordered_map<string, Op> OPCODE_MAP = {
 // -------------------- Bit layout ของคำสั่ง 32 บิต --------------------
 // เราใช้การ shift บิตเข้าตำแหน่งที่สเปกกำหนด:
 // [ opcode(3) | regA(3) | regB(3) | (ที่เหลือ 16 บิต/3 บิตขึ้นกับชนิด) ]
-constexpr int OPCODE_SHIFT = 22;
-constexpr int REGA_SHIFT   = 19;
-constexpr int REGB_SHIFT   = 16;
-
+constexpr int OPCODE_SHIFT = 22; //OPCODE_SHIFT=22
+constexpr int REGA_SHIFT   = 19; //REGA_SHIFT=19
+constexpr int REGB_SHIFT   = 16; //REGB_SHIFT=16
+//opcode อยู่บิต [24..22] (3 บิต)
+//regA บิต [21..19] (3 บิต)
+//regB บิต [18..16] (3 บิต)
+//แล้วที่เหลือขึ้นกับชนิดคำสั่ง
 
 // ฟังก์ชัน pack บิตสำหรับแต่ละฟอร์แมต (ลด duplicate โค้ด)
 inline uint32_t packR(int opcode, int rA, int rB, int dest) {
-    // R-type: ช่องท้ายสุดใช้เพียง 3 บิตสำหรับ destReg
+    // R-type(add, nand) : ช่องท้ายสุดใช้เพียง 3 บิตสำหรับ destReg (3 บิตที่ [2..0]) ส่วน [15..3] เป็น 0)
     return (uint32_t(opcode) << OPCODE_SHIFT)
         | (uint32_t(rA)     << REGA_SHIFT)
         | (uint32_t(rB)     << REGB_SHIFT)
-        | (uint32_t(dest) & 0x7u);
+        | (uint32_t(dest) & 0x7u); //dest & 0x7u บังคับ 3 บิต
 }
 inline uint32_t packI(int opcode, int rA, int rB, int offset16) {
-    // I-type: 16 บิตท้ายใช้เก็บ offset แบบ two's complement
+    // I-type(lw, sw, beq): 16 บิตท้ายใช้เก็บ offset แบบ two's complement
     return (uint32_t(opcode) << OPCODE_SHIFT)
         | (uint32_t(rA)     << REGA_SHIFT)
         | (uint32_t(rB)     << REGB_SHIFT)
-        | (uint32_t(offset16) & 0xFFFFu); // mask 16 บิตล่างให้ชัดเจน
+        | (uint32_t(offset16) & 0xFFFFu); // & 0xFFFFu เพื่อชัดเจนว่าตัดเหลือ 16 บิต
 }
 inline uint32_t packJ(int opcode, int rA, int rB) {
-    // J-type: ใช้แค่ opcode + regA + regB, ที่เหลือ (16 บิต) เป็น 0
+    // J-type(jalr): ใช้แค่ opcode + regA + regB, ที่เหลือ (16 บิต[15..0]) เป็น 0
     return (uint32_t(opcode) << OPCODE_SHIFT)
         | (uint32_t(rA)     << REGA_SHIFT)
         | (uint32_t(rB)     << REGB_SHIFT);
 }
 inline uint32_t packO(int opcode) {
+    // ใช้กับ halt, noop
     // O-type: ใช้เฉพาะ opcode, ที่เหลือทั้งหมดเป็น 0
     return (uint32_t(opcode) << OPCODE_SHIFT);
 }
@@ -91,22 +108,23 @@ inline uint32_t packO(int opcode) {
 // -------------------- โครงสร้าง error ที่เราจะรายงาน --------------------
 enum class AsmError {
     NONE = 0,
-    UNKNOWN_OPCODE,   // คำสั่งไม่อยู่ใน mapping
-    UNDEFINED_LABEL,  // อ้าง label ที่ไม่มีใน symbol table
-    OFFSET_OUT_OF_RANGE, // offset 16-bit เกินช่วง signed (-32768..32767)
-    BAD_IMMEDIATE,    // immediate/number แปลงไม่ได้หรือรูปแบบผิด
-    BAD_REGISTER      // เรจิสเตอร์หายไป หรืออยู่นอกช่วง 0..7 (3 บิต)
+    UNKNOWN_OPCODE,   // คำสั่งไม่อยู่ใน mapping ;opcode ไม่รู้จัก
+    UNDEFINED_LABEL,  // อ้าง label ที่ไม่มีใน symbol table ; label ไม่มี,
+    OFFSET_OUT_OF_RANGE, // offset 16-bit เกินช่วง signed (-32768..32767) ; offset เกิน 16 บิต
+    BAD_IMMEDIATE,    // immediate/number แปลงไม่ได้หรือรูปแบบผิด ; immediate ผิด
+    BAD_REGISTER      // เรจิสเตอร์หายไป หรืออยู่นอกช่วง 0..7 (3 บิต) ; register ผิดช่วง
 };
 struct ErrInfo {
     AsmError code{AsmError::NONE};
     string   msg;
-};
+}; // ErrInfo เก็บโค้ดและข้อความ error ไว้สื่อสารย้อนกลับ
 
 inline bool okReg(int r){ return 0<=r && r<=7; } // reg 3 บิต: 0..7 เท่านั้น
 
 // -------------------- Helper: mapping/parse/symbol/offset --------------------
 
-// แปลง mnemonic → opcode (int) (.fill = -1)
+// แปลง mnemonic → opcode (int) ด้วย OPCODE_MAP
+// .fill จะให้ outOpcode = -1 
 ErrInfo toOpcode(const string& mnemonic, int& outOpcode) {
     auto it = OPCODE_MAP.find(mnemonic);
     if (it == OPCODE_MAP.end())
@@ -125,7 +143,7 @@ bool looksNumber(const string& s){
     size_t i=0; if (s[0]=='+'||s[0]=='-') i=1;
     if (i>=s.size()) return false;
 
-    // รูปแบบ 0x.. (hex)
+    // รูปแบบ 0x.. (hex) ฐาน 16
     if (i+1<s.size() && s[i]=='0' && (s[i+1]=='x'||s[i+1]=='X')){
         i+=2; if (i>=s.size()) return false;
         for(; i<s.size(); ++i) if(!isxdigit((unsigned char)s[i])) return false;
@@ -138,6 +156,7 @@ bool looksNumber(const string& s){
 }
 
 // แปลงสตริง → long long (ฐานอัตโนมัติ) พร้อมตรวจขยะตามท้าย
+// parseNumber ใช้ stoll base 0 และกันขยะต่อท้าย
 ErrInfo parseNumber(const string& token, long long& outVal){
     string t = rtrim(token);
     if (!looksNumber(t))
@@ -154,6 +173,7 @@ ErrInfo parseNumber(const string& token, long long& outVal){
 }
 
 // หา address ของ label จาก symbol table (ไม่เจอ → error)
+// มองหา label ใน unordered_map ถ้าไม่เจอ → error UNDEFINED_LABEL
 ErrInfo findLabel(const unordered_map<string,int>& symtab,
                 const string& label, int& outAddr){
     auto it = symtab.find(label);
@@ -176,15 +196,18 @@ ErrInfo getFieldValue(const unordered_map<string,int>& symtab,
         ErrInfo e = parseNumber(t,val);
         if(e.code!=AsmError::NONE) return e;
     }else{
-        // เป็น label → หา address จาก symbol table
+        // เป็น label → หา address จาก symbol table(symtab)
         int addr=0; ErrInfo e = findLabel(symtab, t, addr);
         if (e.code!=AsmError::NONE) return e;
-        // ถ้าเป็น beq: ใช้ offset แบบ relative เป้าหมาย - (PC+1)
+
+        // ถ้า isBranch=true (beq) → แปลงเป็น relative offset = labelAddr - (PC+1)**
         if (isBranch) val = (long long)addr - (long long)(currentPC+1);
+        // ถ้า isBranch=false (lw/sw/.fill) → ใช้ address ตรง ๆ (word address)**
         else          val = addr;
     }
 
-    // ถ้าเป็น offset 16 บิต ต้องไม่เกินช่วง signed 16-bit
+    // ถ้า asOffset16=true → บังคับค่าที่ได้ต้องอยู่ในช่วง signed 16-bit (-32768..32767)
+    // ไม่งั้น error OFFSET_OUT_OF_RANGE
     if (asOffset16 && !inSigned16(val))
         return {AsmError::OFFSET_OUT_OF_RANGE, "offset out of 16-bit range: " + to_string(val)};
 
@@ -193,19 +216,20 @@ ErrInfo getFieldValue(const unordered_map<string,int>& symtab,
 }
 
 // -------------------- โครงสร้าง IR (รับจาก Part A) --------------------
-// หมายเหตุ: Part A จะ parse ข้อความ assembly แล้วส่ง IR ให้เรา (Part B)
+// หมายเหตุ: Part A(ปฟ) จะ parse ข้อความ assembly แล้วส่ง IR ให้เรา (Part B (นน)) 
 // - mnemonic: ชื่อคำสั่ง เช่น add/lw/beq/.../.fill
 // - regA/regB/dest: ตำแหน่งเรจิสเตอร์ที่เกี่ยวข้อง (R/J type ใช้ dest)
 // - fieldToken: ค่าฟิลด์ (offset/label) สำหรับ I-type และค่าใน .fill
 // - pc: address ของคำสั่งบรรทัดนั้น (เริ่มนับจาก 0)
 struct IRInstr {
-    string mnemonic;
-    int    regA{-1}, regB{-1}, dest{-1};
-    string fieldToken;
-    int    pc{-1};
+    string mnemonic; //mnemonic: เช่น add, lw, .fill
+    int    regA{-1}, regB{-1}, dest{-1}; // regA, regB, dest: เลขเรจิสเตอร์ (ถ้าไม่ระบุจะเป็น -1)
+    string fieldToken; // fieldToken: token ของฟิลด์ท้าย (offset/label สำหรับ lw/sw/beq หรือค่าของ .fill)
+    int    pc{-1}; // pc: address ของบรรทัดนี้ (เริ่มที่ 0)
 };
 
 // -------------------- helper: ตรวจ register ให้ครบและอยู่ในช่วง --------------------
+// needReg ตรวจว่ามีค่าไหม (ไม่ใช่ -1) และอยู่ในช่วงหรือไม่
 static ErrInfo needReg(int reg, const string& name){
     if (reg < 0)
         return {AsmError::BAD_REGISTER, "missing "+name}; // ไม่ได้ใส่มา
