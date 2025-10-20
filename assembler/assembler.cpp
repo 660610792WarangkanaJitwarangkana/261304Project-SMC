@@ -17,6 +17,8 @@
 #include <fstream>       // อ่าน/เขียนไฟล์
 #include <sstream>       // istringstream ใช้ parse บรรทัด
 #include <algorithm>     // find_if ใช้ trim ด้านขวา
+#include <bitset>  // ใช้พิมพ์เลขฐานสอง 3 บิตของ opcode (เช่น 000..111)
+
 
 using namespace std;
 
@@ -133,6 +135,45 @@ ErrInfo toOpcode(const string& mnemonic, int& outOpcode) {
     outOpcode = static_cast<int>(it->second);
     return {AsmError::NONE,""};
 }
+
+// -----------------------------------------------------------------------------
+// helper: พิมพ์ opcode จากชื่อคำสั่ง (mnemonic) แบบ CLI
+// การใช้งาน: printOpcodeCLI("add")  → พิมพ์ "add -> opcode 0 (bin 000)"
+// หมายเหตุ:
+//   - ใช้ฟังก์ชันเดิมของโปรเจกต์: toOpcode(mnemonic, outOpcode)
+//   - ถ้าเป็น ".fill" จะถือเป็น directive (ไม่ใช่ instruction) → opcode = -1
+// -----------------------------------------------------------------------------
+static int printOpcodeCLI(const std::string& m) {
+    int opcode = -1;  // ค่าตั้งต้น (-1) เผื่อกรณีไม่ใช่ instruction เช่น .fill
+
+    // เรียก mapping ชื่อคำสั่ง → ตัวเลข opcode
+    //   - สำเร็จ: opcode จะเป็น 0..7 (add..noop) หรือ -1 ถ้าเป็น .fill
+    //   - ล้มเหลว: code != NONE แปลว่าไม่รู้จัก mnemonic นี้
+    ErrInfo e = toOpcode(m, opcode);
+
+    // ถ้าไม่รู้จัก mnemonic → แจ้ง error และจบด้วยรหัส 1 (ผิดพลาด)
+    if (e.code != AsmError::NONE) {
+        std::cerr << "unknown mnemonic: " << m << "\n";
+        return 1;
+    }
+
+    // พิมพ์ชื่อคำสั่งและเลข opcode (แบบฐานสิบ) ออกไปก่อน
+    std::cout << m << " -> opcode " << opcode;
+
+    // ถ้าเป็นคำสั่งจริง (opcode 0..7) แถมรูปแบบฐานสอง 3 บิตให้ดูด้วย
+    // ตัวอย่าง: 4 → "100" (beq)
+    if (opcode >= 0) {
+        std::cout << " (bin " << std::bitset<3>(opcode) << ")";
+    } else {
+        // กรณีพิเศษ: .fill ไม่ใช่ instruction → แสดงว่าเป็น directive ชัดเจน
+        std::cout << " (directive)"; // .fill = -1
+    }
+
+    // ปิดท้ายด้วยขึ้นบรรทัดใหม่ แล้วคืนค่า 0 (สำเร็จ)
+    std::cout << "\n";
+    return 0;
+}
+
 
 // helper เช็คว่า x อยู่ในช่วง signed 16-bit หรือไม่
 inline bool inSigned16(long long x){ return -32768<=x && x<=32767; }
@@ -261,6 +302,8 @@ EncodeResult assembleOne(const unordered_map<string,int>& symtab, const IRInstr&
         r.word = val;
         return r;
     }
+    // assembler แสดง opcode ของทุกบรรทัด
+    cout << "Mnemonic " << ir.mnemonic << " => Opcode " << opcode << endl;
 
     // 3) เลือก pack ตามชนิดของ opcode (R/I/J/O)
     switch (static_cast<Op>(opcode)){
@@ -446,6 +489,27 @@ vector<IRInstr> loadIR(const string& filename){
 int main(int argc, char** argv){
     ios::sync_with_stdio(false);
     cin.tie(nullptr);
+
+        // ---------------- โหมดพิเศษ: เช็ค opcode ผ่าน CLI ----------------
+    // รูปแบบการเรียก:
+    //   assembler.exe --opcode <mnemonic>
+    // ตัวอย่าง:
+    //   assembler.exe --opcode add
+    //   assembler.exe --opcode beq
+    //   assembler.exe --opcode ".fill"
+    //
+    // ข้อดี: ไม่ไปแตะไฟล์ IR/Symbols เลย เอาไว้เช็ค mapping เร็ว ๆ
+    if (argc >= 2 && std::string(argv[1]) == "--opcode") {
+        // ต้องมีอาร์กิวเมนต์ตัวที่ 2 เป็นชื่อคำสั่ง
+        if (argc < 3) {
+            std::cerr << "usage: " << argv[0] << " --opcode <mnemonic>\n"
+                    << "ex:    " << argv[0] << " --opcode add\n";
+            return 1;
+        }
+        // เรียก helper แล้วจบโปรแกรมในโหมดนี้ทันที (ไม่ไปทำงาน assemble ปกติ)
+        return printOpcodeCLI(argv[2]);
+    }
+
 
     // ดีฟอลต์ชื่อไฟล์ (สามารถส่งเองผ่าน argv)
     string irPath  = (argc >= 2 ? argv[1] : "program.ir");
