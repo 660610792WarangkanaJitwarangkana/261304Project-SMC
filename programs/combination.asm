@@ -12,8 +12,7 @@
         halt
 
 ; combination function: R1 = n, R2 = r, returns R3 = result
-comb    ; Base case: if r == 0, return 1
-        beq  2   0   base
+comb    beq  2   0   base       ; Base case: if r == 0, return 1
         
         ; Base case: if n == r, return 1
         beq  1   2   base
