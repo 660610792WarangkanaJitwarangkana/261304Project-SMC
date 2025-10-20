@@ -196,19 +196,35 @@ bool looksNumber(const string& s){
     return true;
 }
 
-// แปลงสตริง → long long (ฐานอัตโนมัติ) พร้อมตรวจขยะตามท้าย
-// parseNumber ใช้ stoll base 0 และกันขยะต่อท้าย
+// แปลงสตริง "token" ให้เป็นจำนวนเต็มแบบ long long แล้วส่งค่าออกทาง outVal
+// - รองรับเลขฐาน 10, 16 (ถ้าเขียนในรูป 0x...)
+// - ตรวจเคร่ง: ต้องไม่มีขยะตามท้าย เช่น "12abc" (จะ error)
+// - คืนค่า ErrInfo เพื่อบอกสถานะความสำเร็จ/ล้มเหลวและข้อความอธิบาย
 ErrInfo parseNumber(const string& token, long long& outVal){
+    // ตัดช่องว่างฝั่งขวาออกก่อน เช่น "123   " → "123"
     string t = rtrim(token);
+    // ตรวจคร่าว ๆ ว่าลักษณะสตริง "ดูเป็นเลข" ไหม
+    // (รองรับ +/-, 0x... สำหรับ hex, และตัวเลขล้วนสำหรับฐาน 10)
     if (!looksNumber(t))
         return {AsmError::BAD_IMMEDIATE, "not a valid number: " + t};
     try{
         size_t pos=0;
+        // ใช้ stoll แปลงสตริงเป็น long long
+        // base = 0 → auto-detect ฐาน:
+        //   - ถ้าเริ่มด้วย "0x" / "0X" → ฐาน 16 (hex)
+        //   - ถ้าเริ่มด้วย "0" (แต่ไม่ใช่ 0x) → C++ จะตีเป็นฐาน 8 (octal)
+        //   - นอกนั้น → ฐาน 10
         outVal = stoll(t, &pos, 0); // base 0: 0x..=hex, อื่น ๆ=dec
+        // ถ้าอ่านได้ไม่ครบทั้งสตริง เช่น "12abc" จะเหลือ "abc" ทำให้ pos != t.size()
+        // ถือว่า "มีขยะตามท้าย" → แจ้ง error เพื่อกันข้อมูลสกปรก
         if (pos!=t.size())
             return {AsmError::BAD_IMMEDIATE, "trailing junk: " + t};
-        return {AsmError::NONE,""};
+            // สำเร็จ: ไม่พบปัญหา
+            return {AsmError::NONE,""};
     }catch(...){
+        // มาที่นี่ได้จากสองกรณีหลัก:
+        //   - สตริงไม่ใช่ตัวเลขจริง ๆ
+        //   - หรือค่าใหญ่/เล็กเกินช่วงของ long long (overflow/underflow)
         return {AsmError::BAD_IMMEDIATE, "cannot parse: " + t};
     }
 }
@@ -280,21 +296,24 @@ static ErrInfo needReg(int reg, const string& name){
 }
 
 // -------------------- เข้ารหัสคำสั่งเดี่ยว (Week 3) --------------------
-// ผลลัพธ์: word = machine code (32-bit) ในรูป int32_t สำหรับพิมพ์เป็นฐาน 10
+// ผลลัพธ์: word = machine code (32-bit) ในรูป int32_t สำหรับพิมพ์เป็นฐาน 10 
 struct EncodeResult {
-    ErrInfo  error;
-    int32_t  word{0};
+    ErrInfo  error; //error : รายละเอียดความผิดพลาด (ถ้าไม่มีจะเป็น AsmError::NONE)
+    int32_t  word{0}; // word  : machine code 32 บิต (พิมพ์เป็นฐาน 10 ตามสเปกตอนเขียนไฟล์ .mc)
 };
 
 EncodeResult assembleOne(const unordered_map<string,int>& symtab, const IRInstr& ir){
-    EncodeResult r;
-    int opcode=-1;
+    EncodeResult r; // โครงผลลัพธ์ (เริ่มต้น error=NONE, word=0)
+    int opcode=-1; // opcode เริ่ม -1 (จะถูกตั้งค่าใน toOpcode)
 
-    // 1) แปลง mnemonic -> opcode (ถ้า .fill จะให้ opcode=-1)
+    // 1) แปลง mnemonic → opcode
+    // ถ้าไม่รู้จัก opcode → คืน error ทันที
+    // ถ้าเป็น .fill → ตั้ง opcode=-1 (ถือเป็น directive ไม่ใช่ instruction)
     r.error = toOpcode(ir.mnemonic, opcode);
     if (r.error.code!=AsmError::NONE) return r;
 
-    // 2) .fill: ไม่ใช่คำสั่ง ให้คืนค่าตัวเลข/addr ตรง ๆ
+    // 2) .fill: ไม่ใช่ instruction → คืน "ค่า" ตรง ๆ ที่ฟิลด์ (ตัวเลขหรือ addr ของ label)
+    // สำหรับ .fill เราไม่ได้แพ็กบิตอะไร แค่เขียนค่าลงทั้งคำ
     if (opcode < 0){
         int val=0;
         ErrInfo e = getFieldValue(symtab, ir.fieldToken, ir.pc, false, false, val);
@@ -310,18 +329,24 @@ EncodeResult assembleOne(const unordered_map<string,int>& symtab, const IRInstr&
         case Op::ADD:
         case Op::NAND: {
             // R-type: add/nand regA regB dest
+            // เช็คให้ครบ: regA/regB/dest ต้องกรอกและอยู่ในช่วง 0..7
             ErrInfo e = needReg(ir.regA, "regA"); if (e.code!=AsmError::NONE){ r.error=e; return r; }
             e = needReg(ir.regB, "regB");         if (e.code!=AsmError::NONE){ r.error=e; return r; }
             e = needReg(ir.dest, "destReg");      if (e.code!=AsmError::NONE){ r.error=e; return r; }
+            // แพ็กบิต:
+            // [ opcode(3) | regA(3) | regB(3) | .... | dest(3) ]
             r.word = (int32_t)packR(opcode, ir.regA, ir.regB, ir.dest);
             return r;
         }
         case Op::LW:
         case Op::SW: {
             // I-type: lw/sw regA regB offset(16 บิต signed)
+            // รูปแบบ: lw/sw regA regB offset(16 บิตเป็น signed)
+            //  - สำหรับ label → ใช้ addr ตรง ๆ (word-addressed)
             ErrInfo e = needReg(ir.regA, "regA"); if (e.code!=AsmError::NONE){ r.error=e; return r; }
             e = needReg(ir.regB, "regB");         if (e.code!=AsmError::NONE){ r.error=e; return r; }
             int off=0;
+            // asOffset16=true (ต้องเข้า 16 บิต), isBranch=false (ไม่ใช่ branch)
             e = getFieldValue(symtab, ir.fieldToken, ir.pc, true, false, off);
             if (e.code!=AsmError::NONE){ r.error=e; return r; }
             r.word = (int32_t)packI(opcode, ir.regA, ir.regB, off);
@@ -329,16 +354,21 @@ EncodeResult assembleOne(const unordered_map<string,int>& symtab, const IRInstr&
         }
         case Op::BEQ: {
             // I-type: beq regA regB offset(label) → relative = labelAddr - (PC+1)
+            // รูปแบบ: beq regA regB offset/label
+            //  - ถ้าเป็น label ต้องคำนวณแบบ relative: offset = labelAddr - (PC+1)
             ErrInfo e = needReg(ir.regA, "regA"); if (e.code!=AsmError::NONE){ r.error=e; return r; }
             e = needReg(ir.regB, "regB");         if (e.code!=AsmError::NONE){ r.error=e; return r; }
             int off=0;
             e = getFieldValue(symtab, ir.fieldToken, ir.pc, true, true, off);
+            // asOffset16=true (ต้องเข้า 16 บิต), isBranch=true (คำนวณ relative)
             if (e.code!=AsmError::NONE){ r.error=e; return r; }
             r.word = (int32_t)packI(opcode, ir.regA, ir.regB, off);
             return r;
         }
         case Op::JALR: {
             // J-type: jalr regA regB (ไม่ใช้ช่อง 16 บิตท้าย)
+            // รูปแบบ: jalr regA regB
+            //  - ไม่ใช้บิต 16 ล่าง → packJ จะเติมศูนย์ให้เอง
             ErrInfo e = needReg(ir.regA, "regA"); if (e.code!=AsmError::NONE){ r.error=e; return r; }
             e = needReg(ir.regB, "regB");         if (e.code!=AsmError::NONE){ r.error=e; return r; }
             r.word = (int32_t)packJ(opcode, ir.regA, ir.regB);
@@ -351,6 +381,7 @@ EncodeResult assembleOne(const unordered_map<string,int>& symtab, const IRInstr&
             return r;
         }
         default:
+            // ถ้ามาถึงนี่แปลว่า enum Op ใหม่ยังไม่รองรับใน switch
             r.error = {AsmError::UNKNOWN_OPCODE, "unhandled opcode"};
             return r;
     }
