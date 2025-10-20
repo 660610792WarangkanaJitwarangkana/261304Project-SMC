@@ -67,4 +67,4 @@ pos1    .fill 1
 neg1    .fill -1
 result  .fill 0
 stack   .fill 100
-comb    .fill 8              ; address of comb function
+comb    .fill 8              ; address of comb function.
