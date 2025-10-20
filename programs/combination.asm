@@ -5,7 +5,7 @@
         lw   0   7   neg1    ; R7 = -1
         
         ; Call combination(n, r)
-        lw   0   4   comb    ; R4 = address of comb
+        lw   0   4   combAd  ; R4 = address of comb
         jalr 4   3           ; call comb, R3 = return address
         
         sw   0   3   result  ; store result
@@ -28,7 +28,7 @@ comb    ; Base case: if r == 0, return 1
         
         ; First recursive call: combination(n-1, r)
         add  1   7   1       ; n = n - 1
-        lw   0   4   comb    ; R4 = address of comb
+        lw   0   4   combAd  ; R4 = address of comb
         jalr 4   3           ; recursive call
         
         ; Save result of first call
@@ -44,7 +44,7 @@ comb    ; Base case: if r == 0, return 1
         ; Second recursive call: combination(n-1, r-1)
         add  1   7   1       ; n = n - 1
         add  2   7   2       ; r = r - 1
-        lw   0   4   comb    ; R4 = address of comb
+        lw   0   4   combAd  ; R4 = address of comb
         jalr 4   3           ; recursive call
         
         ; Get first result and add
@@ -67,4 +67,4 @@ pos1    .fill 1
 neg1    .fill -1
 result  .fill 0
 stack   .fill 100
-comb    .fill 8              ; address of comb function.
+combAd  .fill 8              ; address of comb function
