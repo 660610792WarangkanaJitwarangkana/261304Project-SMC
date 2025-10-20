@@ -6,6 +6,6 @@ addr    label   instr   field0  field1  field2    regA    regB    dest    offset
 4               beq     0       0       start     0       0       0       -3        0         
 5               noop                              0       0       0       0         0         
 6       done    halt    end     of      program   0       0       0       0         0         
-7       five    .fill   5                         0       0       0       0         5         
-8       neg1    .fill   -1                        0       0       0       0         -1        
+7       five    .fill   32766                     0       0       0       0         32766     
+8       neg1    .fill   10383                     0       0       0       0         10383     
 9       stAddr  .fill   start   will    contain   0       0       0       0         2         
