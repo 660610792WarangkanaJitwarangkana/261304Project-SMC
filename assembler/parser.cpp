@@ -30,7 +30,7 @@ bool isNumber(const string &s) {
     return true;
 }
 
-// เช็คว่ารูปแบบของ label ถูกต้องตามเงื่อนไขมั้ย
+// เช็คว่ารูปแบบของ label ถูกต้องตามเงื่อนไขมั้ย (LC-2K)
 static bool validLabelName(const string &s) {
     if (s.empty()) return false;
     if (!isalpha((unsigned char)s[0])) return false;    // ต้องขึ้นต้นด้วยตัวอักษร
@@ -46,7 +46,7 @@ void dieError(const string &msg) {
     exit(1);
 }
 
-// แยก string เป็น tokens ตาม whitespace
+// แยก string หนึ่งบรรทัดออกเป็น tokens โดยใช้ช่องว่างเป็นตัวคั่น
 static vector<string> tokenize_ws(const string &s) {
     vector<string> toks;
     istringstream iss(s);
@@ -58,7 +58,8 @@ static vector<string> tokenize_ws(const string &s) {
 
 Parser::Parser() {}
 
-// อ่านไฟล์ทั้งหมดและตัด comment ออก
+// อ่านไฟล์ assembly ทั้งหมดเก็บลง vector<string> rawLines
+// พร้อมกับลบ comment ที่เจอ (เช่น # หรือ ;)
 void Parser::readAllLines(const string &filename, const string &commentChars) {
     rawLines.clear();
     ifstream ifs(filename);
@@ -79,13 +80,14 @@ void Parser::readAllLines(const string &filename, const string &commentChars) {
             if (pos != string::npos) line = line.substr(0, pos);
         }
 
-        // เก็บ raw line (อาจเป็น blank line หรือ whitespace)
+        // เก็บ raw line แม้ว่าจะป็น blank line หรือ whitespace (ไว้ใช้กรณีนับ address)
         rawLines.push_back(line);
     }
     ifs.close();
 }
 
-// pass1: สร้าง symbol table และ IR preliminary
+// - แปลงแต่ละบรรทัดเป็น IRLine (บรรทัดคำสั่ง)
+// - เก็บ label ที่เจอไว้ใน symbol table พร้อม address ของ label นั้นๆ
 void Parser::pass1_buildSymbolTable(bool countBlankLines) {
     ir.clear();
     symbols.clear();
@@ -99,7 +101,7 @@ void Parser::pass1_buildSymbolTable(bool countBlankLines) {
         IRLine L;
         L.address = addr;
 
-        // เป็นบรรทัดว่าง
+        // เป็นบรรทัดว่าง (ไม่มีคำสั่งหรือ label)
         if (isBlank) {  
             if (countBlankLines) {  
                 // จะนับช่องว่างก็ต่อเมื่อคำสั่งเป็น noop และไม่มี label
@@ -129,11 +131,12 @@ void Parser::pass1_buildSymbolTable(bool countBlankLines) {
                     throw runtime_error("duplicate label '" + first + "' at source line " + to_string(lineno+1));
                 }
 
+                // บันทึก label และ address ลง symbol table
                 labelToAddr[first] = addr;
                 symbols.push_back({first, addr});
                 L.rawLabel = first;
 
-                // ถ้ามี instruction ตามหลัง label
+                // จากนั้นอ่านคำสั่งและ operands ถ้ามี
                 if (toks.size() >= 2) L.instr = toks[1];
                 if (toks.size() >= 3) L.f0 = toks[2];
                 if (toks.size() >= 4) L.f1 = toks[3];
@@ -149,12 +152,15 @@ void Parser::pass1_buildSymbolTable(bool countBlankLines) {
             }
         }
 
+        // เพิ่มบรรทัดเข้า IR และขยับ address ไปถัดไป
         ir.push_back(L);
         addr++;
     }
 }
 
-// pass2: resolve operand, registers, offsets
+// ใช้ข้อมูลจาก pass1 เพื่อ resolve ค่า operand ให้สมบูรณ์ เช่น:
+// - แปลง label เป็น address
+// - ตรวจสอบค่า register และ offset
 void Parser::pass2_resolve(bool countBlankLines) {
 
     // สร้าง map ของ label กับ address เพื่อ lookup เร็วขึ้น
@@ -176,7 +182,7 @@ void Parser::pass2_resolve(bool countBlankLines) {
         }
 
         // แยกข้อมูลตามชนิดคำสั่ง
-        // .fill ใช้ใส่ค่าตัวเลขหรือตำแหน่ง label ลงใน memory
+        // .fill  — ใช้กำหนดค่าคงหรือตำแหน่ง label ลงใน memory
         if (m == ".fill") {
             L.isFill = true;
             // ไม่มี field1 (f0) ตามหลัง
@@ -197,6 +203,7 @@ void Parser::pass2_resolve(bool countBlankLines) {
         }
 
         // R-type: add, nand
+        // รูปแบบ: opcode regA regB destReg
         if (m == "add" || m == "nand") {
             // ไล่เช็คว่ามีครบทุก field มั้ย
             if (L.f0.empty() || L.f1.empty() || L.f2.empty()) 
@@ -214,6 +221,7 @@ void Parser::pass2_resolve(bool countBlankLines) {
         }
 
         // I-type: lw, sw
+        // รูปแบบ: opcode regA regB offsetField
         if (m == "lw" || m == "sw") {
             // ไล่เช็คว่ามีครบทุก field มั้ย
             if (L.f0.empty() || L.f1.empty() || L.f2.empty()) 
@@ -245,15 +253,20 @@ void Parser::pass2_resolve(bool countBlankLines) {
         }
 
         // Branch: beq
+        // รูปแบบ: opcode regA regB offset (offset อาจเป็น label หรือเลข)
         if (m == "beq") {
             // ไล่เช็คความถูกต้องเหมือน I-type
             if (L.f0.empty() || L.f1.empty() || L.f2.empty()) 
                 throw runtime_error("beq missing field at address " + to_string(L.address));
-            if (!isNumber(L.f0) || !isNumber(L.f1)) throw runtime_error("beq regA/regB must be numeric at address " + to_string(L.address));
+            if (!isNumber(L.f0) || !isNumber(L.f1)) 
+                throw runtime_error("beq regA/regB must be numeric at address " + to_string(L.address));
             L.regA = stoi(L.f0);
             L.regB = stoi(L.f1);
+
             if (L.regA < 0 || L.regA > 7 || L.regB < 0 || L.regB > 7) 
                 throw runtime_error("register out of range (0..7) at address " + to_string(L.address));
+            
+            // offset อาจเป็นตัวเลขหรือ label
             if (isNumber(L.f2)) {
                 long long v = stoll(L.f2);
                 if (v < -32768 || v > 32767) 
@@ -273,6 +286,7 @@ void Parser::pass2_resolve(bool countBlankLines) {
         }
 
         // J-type: jalr
+        // รูปแบบ: opcode regA regB
         if (m == "jalr") {
             // เช็ค field regA regB เหมือน I-type
             if (L.f0.empty() || L.f1.empty()) 
@@ -296,19 +310,24 @@ void Parser::pass2_resolve(bool countBlankLines) {
     }
 }
 
+// parseFile() รวมทุกขั้นตอนการ parse: อ่านไฟล์, pass1, pass2
 void Parser::parseFile(const string &filename, bool countBlankLines, const string &commentChars) {
     readAllLines(filename, commentChars);
     pass1_buildSymbolTable(countBlankLines);
     pass2_resolve(countBlankLines);
 }
 
+// ฟังก์ชันสำหรับดึงข้อมูล IR และ symbol ออกไปใช้งาน
 const vector<IRLine>& Parser::getIR() const { return ir; }
 const vector<Label>& Parser::getSymbols() const { return symbols; }
 
+// เขียนข้อมูล IR (intermediate representation) ลงไฟล์ .ir
+// เพื่อใช้เป็น input ของ assembler
 void Parser::writeIRFile(const string &outname) const {
     ofstream ofs(outname);
     if (!ofs.is_open()) throw runtime_error("cannot write IR file: " + outname);
 
+    // head ของตาราง
     ofs << left
         << setw(8)  << "addr"
         << setw(8)  << "label"
@@ -323,6 +342,7 @@ void Parser::writeIRFile(const string &outname) const {
         << setw(10) << "fillValue"
         << "\n";
 
+    // ข้อมูลที่ parse ได้    
     for (const auto &L : ir) {
         ofs << setw(8)  << L.address
             << setw(8)  << L.rawLabel
@@ -341,15 +361,18 @@ void Parser::writeIRFile(const string &outname) const {
 
 }
 
+// เขียนข้อมูล symbol table ลงไฟล์ (ชื่อ label และ address)
 void Parser::writeSymbolsFile(const string &outname) const {
     ofstream ofs(outname);
     if (!ofs.is_open()) throw runtime_error("cannot write symbols file: " + outname);
     
+    // head ของตาราง
     ofs << left
         << setw(10) << "LabelName"
         << setw(10) << "Address"
         << "\n";
 
+    // ข้อมูล label และ address ที่ได้
     for (const auto &p : symbols) {
         ofs << setw(10) << p.name
             << setw(10) << p.address
@@ -359,8 +382,8 @@ void Parser::writeSymbolsFile(const string &outname) const {
 }
 
 int main() {
-    string inputFile = "test(assembly-language).asm";   // ไฟล์ assembly สำหรับเทส
-
+    string inputFile = "test(assembly-language).asm";   // test(assembly-language).asm ไฟล์ assembly สำหรับเทส
+                                                        // ../programs/factorial.asm , multiply.asm
     Parser parser;                   
     parser.parseFile(inputFile);                        // เรียกฟังก์ชันหลักเพื่ออ่านและแยกข้อมูล
 
