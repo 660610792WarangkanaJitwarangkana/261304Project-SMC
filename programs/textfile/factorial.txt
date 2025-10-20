@@ -1,0 +1,33 @@
+R1 = 5           // n = 5
+R2 = 1           // result = 1
+R4 = -1          // สำหรับลดค่า
+
+while R1 != 0:
+    temp = 0
+    counter = R1
+    
+    // คูณ result × n โดยการบวกซ้ำ
+    while counter != 0:
+        temp = temp + result
+        counter = counter - 1
+    end while
+    
+    result = temp    // อัพเดทผลลัพธ์
+    n = n - 1        // ลด n ลง 1
+end while
+
+halt
+
+ตัวอย่างการทำงาน
+รอบที่ 1 (n=5):
+  result = 1 × 5 = 5
+รอบที่ 2 (n=4):  
+  result = 5 × 4 = 20
+รอบที่ 3 (n=3):
+  result = 20 × 3 = 60
+รอบที่ 4 (n=2):
+  result = 60 × 2 = 120
+รอบที่ 5 (n=1):
+  result = 120 × 1 = 120
+รอบที่ 6 (n=0): → ออกจากลูป
+ผลลัพธ์: R2 = 120

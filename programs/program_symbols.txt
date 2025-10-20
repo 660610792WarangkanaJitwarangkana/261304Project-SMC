@@ -1,7 +1,0 @@
-LabelName Address   
-loop      3         
-done      7         
-A         9         
-B         10        
-OUT       11        
-neg1      12        
