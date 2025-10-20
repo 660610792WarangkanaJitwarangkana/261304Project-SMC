@@ -490,7 +490,7 @@ int main(int argc, char** argv){
     ios::sync_with_stdio(false);
     cin.tie(nullptr);
 
-        // ---------------- โหมดพิเศษ: เช็ค opcode ผ่าน CLI ----------------
+    // ---------------- เช็ค opcode ผ่าน CLI ----------- -----
     // รูปแบบการเรียก:
     //   assembler.exe --opcode <mnemonic>
     // ตัวอย่าง:
