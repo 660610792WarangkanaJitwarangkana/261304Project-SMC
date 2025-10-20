@@ -1,39 +1,18 @@
-multiply.asm
-โปรแกรมคูณ A * B โดยใช้ repeated addition
+R1 = 5           // ตัวตั้ง
+R2 = 3           // ตัวคูณ  
+R4 = -1          // สำหรับลดค่า
+R5 = 0           // ผลลัพธ์
 
-Input:
-    - r1 = A  (loaded from label A)
-    - r2 = B  (loaded from label B)
+while R2 != 0:
+    R5 = R5 + R1  // บวกตัวตั้ง
+    R2 = R2 + R4  // ลดตัวคูณลง 1
+end while
 
-Output:
-    - r3 = result (จะเก็บผลสุดท้าย)
+halt
 
-registers used:
-    - r1: A
-    - r2: B (loop counter)
-    - r3: result accumulator
-    - r7: ใช้เก็บ -1 constant เพื่อทำ B = B - 1 (ลดค่า)
-
-high-level:
-    - r3 = 0
-
-    while (r2 != 0) {
-        r3 = r3 + r1
-        r2 = r2 - 1
-    }
-    store r3 to OUT (memory) ; halt
-
-
-        lw      0   1   A        ; r1 = A    ; load A from memory label A
-        lw      0   2   B        ; r2 = B    ; load B from memory label B
-        add     0   0   3        ; r3 = 0    ; initialize result = 0 (add r0 + r0 -> r3)
-loop    beq     2   0   done     ; if (r2 == 0) goto done  ; check counter B
-        add     1   3   3        ; r3 = r3 + r1   ; accumulate A into result
-        add     2   7   2        ; r2 = r2 + (-1) ; decrement B (r7 contains -1)
-        beq     0   0   loop     ; unconditional jump back to loop (beq r0 r0 loop)
-done    sw      0   3   OUT      ; memory[OUT] = r3 ; store result to memory for checking
-        halt                     ; stop execution
-A       .fill   3                ; initial A (example value 3)
-B       .fill   4                ; initial B (example value 4)
-OUT     .fill   0                ; space to store result (initial 0)
-neg1    .fill   -1               ; constant -1 in memory, expected loaded to r7 by assembler/linker
+ตัวอย่างการทำงาน 5*3
+รอบที่ 1: R2=3, R5=0+5=5
+รอบที่ 2: R2=2, R5=5+5=10  
+รอบที่ 3: R2=1, R5=10+5=15
+รอบที่ 4: R2=0 → ออกจากลูป
+ผลลัพธ์: R5 = 15
